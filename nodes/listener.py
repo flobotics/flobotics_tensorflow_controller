@@ -114,10 +114,38 @@ def listener():
 
     while not rospy.is_shutdown():
 	rospy.loginfo("here")
-	state_batch.append(get_current_state())
 
+	if a==0:
+		#get current state
+		state_batch.append(get_current_state())
+		a=1
+
+	elif a==1:
+		#do random action with decreasing probability, or publish learned values ==> publish 2 servo values
+		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
+		#rospy.Publisher......random or learned value
+		a=2	
+
+	elif a==2:
+		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
+		a=3
 	
+	elif a==3:
+		#get current state, so we can perhaps reward this random action
+ 		# ?? state_batch.append(get_current_state())
 
+		#use build_reward_state() to calc reward, if we have not reached goal_degree, we get no reward. If we have to much or too less force on the wire-ropes, we get no reward.
+		#compare states[0] up to states[angle_possible_max-1] with get_current_state()[0] to get_current_state()[angle_possible_max-1]  ???
+		#compare states[angle_possible_max] up to states[angle_possible_max + force_max_value-1] with get_current_state()[angle_possible_max] to get_current_state()[angle_possible_max + force_max_value-1]
+		#compare the second force value like the above one
+		#add up all three rewards into one value ???
+		# ??? use this one reward value and the previous state and the current state for training ? how ?
+		# first run "output" , then run "train_operation" ?
+		#as we start from scratch, should it train with every step ? would be best, or?
+		#running the output-op and then the train_operation-op ?
+	
+		#in deep-q pong of deepmind they use the last 4 frames, to get a feeling for the direction of the ball, this means i must use, the last 4 states together. Does this mean i must wait 4 states at the very first beginning?	
+		a=1:
 
 	rate.sleep()
 
