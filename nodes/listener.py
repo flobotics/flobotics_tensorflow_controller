@@ -98,8 +98,14 @@ def listener():
     hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
 
     output = tf.matmul(state, hidden_weights)
+	
+    with tf.name_scope("summaries"):
+    	loss = tf.reduce_mean(tf.square(output - targets))
+    	tf.scalar_summary("loss", loss)
 
-    loss = tf.reduce_mean(tf.square(output - targets))
+    merged = tf.merge_all_summaries()
+
+    sum_writer = tf.train.SummaryWriter('/tmp/train', session.graph)
 
     train_operation = tf.train.AdamOptimizer(0.1).minimize(loss)
 
@@ -107,6 +113,7 @@ def listener():
 
     state_batch = []
     rewards_batch = []
+    actions_batch = []
     
 
 
@@ -126,14 +133,20 @@ def listener():
 		a=1
 
 	elif a==1:
-		#do random action with decreasing probability, or publish learned values ==> publish 2 servo values
+		#instead of do random action with decreasing probability,i directly publish learned values which are at the beginning very random-like, or ? ==> publish 2 servo values
 		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
-		#servo_pub.publish()......random or learned value
+
+		#readout = session.run(output, feed_dict={state: [state_batch]})
+		#servo_pub.publish(readout)
+		
 		a=2	
 
 	elif a==2:
 		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
-		#servo_pub.publish()
+		
+		#build int16MultiArray with stop values for all servos (command uses values for 8 servos)
+		#stop_val = 380,380,380,380,380,380,380,380
+		#servo_pub.publish(stop_val)
 		a=3
 	
 	elif a==3:
