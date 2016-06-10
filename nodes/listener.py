@@ -2,6 +2,7 @@
 import rospy
 from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Float32
+from std_msgs.msg import Int16MultiArray
 import tensorflow as tf
 import numpy as np
 
@@ -15,7 +16,8 @@ force_max_value = 1024     #how much force values possible
 angle_goal = 90
 angle_possible_max = 200  #how many degrees the angle can go max
 current_degree = 0
-
+current_force_1 = 0.0
+current_force_2 = 0.0
 
 angle = []
 f1 = []
@@ -74,7 +76,8 @@ def get_current_state():
 
 def adc_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "adc heard %s", data.data)
-    rospy.loginfo("val1: %d", data.data[0])
+    rospy.loginfo("adc-val0: %f", data.data[0])
+    rospy.loginfo("adc-val1: %f", data.data[1])
     current_force_1 = data.data[0]
     current_force_2 = data.data[1]
     
@@ -89,10 +92,10 @@ def listener():
     session = tf.Session()
     build_reward_state()
 
-    state = tf.placeholder(float, [None, NUM_STATES])
-    targets = tf.placeholder(float, [None, NUM_ACTIONS])
+    state = tf.placeholder("float", [None, NUM_STATES])
+    targets = tf.placeholder("float", [None, NUM_ACTIONS])
 
-    hidden_weights = tf.Variable(tf.Constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
+    hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
 
     output = tf.matmul(state, hidden_weights)
 
@@ -109,8 +112,10 @@ def listener():
 
     rospy.Subscriber("adc_pi_plus_pub", Float32MultiArray, adc_callback)
     rospy.Subscriber("degree", Float32, degree_callback)
+    servo_pub = rospy.Publisher('servo_pwm_pi_sub', Int16MultiArray, queue_size=1)
 
     rate = rospy.Rate(1)
+    a=0
 
     while not rospy.is_shutdown():
 	rospy.loginfo("here")
@@ -123,11 +128,12 @@ def listener():
 	elif a==1:
 		#do random action with decreasing probability, or publish learned values ==> publish 2 servo values
 		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
-		#rospy.Publisher......random or learned value
+		#servo_pub.publish()......random or learned value
 		a=2	
 
 	elif a==2:
 		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
+		#servo_pub.publish()
 		a=3
 	
 	elif a==3:
@@ -145,7 +151,7 @@ def listener():
 		#running the output-op and then the train_operation-op ?
 	
 		#in deep-q pong of deepmind they use the last 4 frames, to get a feeling for the direction of the ball, this means i must use, the last 4 states together. Does this mean i must wait 4 states at the very first beginning?	
-		a=1:
+		a=1
 
 	rate.sleep()
 
