@@ -123,6 +123,7 @@ def listener():
 
     rate = rospy.Rate(1)
     a=0
+    sum_writer_index = 0
 
     while not rospy.is_shutdown():
 	rospy.loginfo("here")
@@ -153,15 +154,23 @@ def listener():
 		#get current state, so we can perhaps reward this random action
  		# ?? state_batch.append(get_current_state())
 
-		#use build_reward_state() to calc reward, if we have not reached goal_degree, we get no reward. If we have to much or too less force on the wire-ropes, we get no reward.
-		#compare states[0] up to states[angle_possible_max-1] with get_current_state()[0] to get_current_state()[angle_possible_max-1]  ???
-		#compare states[angle_possible_max] up to states[angle_possible_max + force_max_value-1] with get_current_state()[angle_possible_max] to get_current_state()[angle_possible_max + force_max_value-1]
-		#compare the second force value like the above one
-		#add up all three rewards into one value ???
-		# ??? use this one reward value and the previous state and the current state for training ? how ?
 		# first run "output" , then run "train_operation" ?
 		#as we start from scratch, should it train with every step ? would be best, or?
 		#running the output-op and then the train_operation-op ?
+
+		state_reward = session.run(output, feed_dict={state: [state_batch]})
+		#action_rewards = 
+		#rewards_batch.append(action_rewards) 
+		#use build_reward_state() to calc reward, if we have not reached goal_degree, we get no reward. If we have to much or too less force on the wire-ropes, we get no reward.
+                #compare states[0] up to states[angle_possible_max-1] with get_current_state()[0] to get_current_state()[angle_possible_max-1]  ???
+                #compare states[angle_possible_max] up to states[angle_possible_max + force_max_value-1] with get_current_state()[angle_possible_max] to get_current_state()[angle_possible_max + force_max_value-1]
+		#compare the second force value like the above one
+                #add up all three rewards into one value ???
+                # ??? use this one reward value and the previous state and the current state for training ? how ?
+		
+		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch}
+		sum_writer.add_summary(result, sum_writer_index)
+		sum_writer_index += 1
 	
 		#in deep-q pong of deepmind they use the last 4 frames, to get a feeling for the direction of the ball, this means i must use, the last 4 states together. Does this mean i must wait 4 states at the very first beginning?	
 		a=1
