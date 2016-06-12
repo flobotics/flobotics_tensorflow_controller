@@ -124,6 +124,8 @@ def listener():
     rate = rospy.Rate(1)
     a=0
     sum_writer_index = 0
+    probability_of_random_action = 1
+
 
     while not rospy.is_shutdown():
 	rospy.loginfo("here")
@@ -135,17 +137,41 @@ def listener():
 
 	elif a==1:
 		#instead of do random action with decreasing probability,i directly publish learned values which are at the beginning very random-like, or ? ==> publish 2 servo values
+		#random action is better to explore bigger state space
+
+		probability_of_random_action -= 0.01
+
+		#build random action
+		if random.random <= probability_of_random_action :
+			current_action_state = np.zero([NUM_ACTIONS])
+			rand = random.randrange(NUM_ACTIONS)
+			current_action_state[rand] = 1		
+			
+		else :
+			#or we readout learned action
+			#current_action_state = session.run(output, feed_dict={state: [state_batch]})
+
+		#get the index of the max value to map this value to an original-action
+		max_idx = np.argmax(current_action_state)
+		#how do i map 32 or even more values to the appropriate action?
+		if max_idx==0:
+			#2 servos stop
+			int_arr = [380,380,0,0,0,0,0,0]		
+		#....and so on, till
+		elif max_idx==31:
+			#e.g. first servo fwd, second bwd
+			int_arr = [400,360,0,0,0,0,0,0]
+
+		#servo_pub.publish(int_arr)
 		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
 
-		#readout = session.run(output, feed_dict={state: [state_batch]})
-		#servo_pub.publish(readout)
-		
 		a=2	
 
 	elif a==2:
 		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
 		
 		#build int16MultiArray with stop values for all servos (command uses values for 8 servos)
+		#there are 32 possible actions, e.g. stop_state = [1,0,0,0......]
 		#stop_val = 380,380,380,380,380,380,380,380
 		#servo_pub.publish(stop_val)
 		a=3
