@@ -7,7 +7,7 @@ import tensorflow as tf
 import numpy as np
 
 NUM_STATES = 200+1024+1024  #possible degrees the joint could move, 1024 force values, two times
-NUM_ACTIONS = 32 #2^5   ,one stop-state, two different speed left, two diff.speed right, two servos
+NUM_ACTIONS = 9  #3^2=9      ,one stop-state, two different speed left, two diff.speed right, two servos
 GAMMA = 0.5
 
 force_reward_max = 150  #where should the max point be
@@ -23,6 +23,17 @@ angle = []
 f1 = []
 f2 = []
 states = []
+
+#variables for bad-mapping approach, s1=servo1 , s2=servo2,.... 
+s1_stop = 380
+s1_fwd_1 = 400
+s1_bwd_1 = 360
+#.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
+s2_stop = 385
+s2_fwd_1 = 405
+s2_bwd_1 = 365
+sx0 = 1050  #do nothing value for not-used servos
+
 
 def build_reward_state():
 	f_list1_length = force_reward_max - (force_reward_length/2)
@@ -125,7 +136,8 @@ def listener():
     a=0
     sum_writer_index = 0
     probability_of_random_action = 1
-
+    servo_pub_values = Int16MultiArray()
+    servo_pub_values.data = []
 
     while not rospy.is_shutdown():
 	rospy.loginfo("here")
@@ -156,13 +168,28 @@ def listener():
 		#how do i map 32 or even more values to the appropriate action?
 		if max_idx==0:
 			#2 servos stop
-			int_arr = [380,380,0,0,0,0,0,0]		
-		#....and so on, till
-		elif max_idx==31:
-			#e.g. first servo fwd, second bwd
-			int_arr = [400,360,0,0,0,0,0,0]
+			servo_pub_values.data.insert(0, [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])		
+		elif max_idx==1:
+			servo_pub_values.data.insert(0, [s1_fwd_1, s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])
+		elif max_idx==2:
+                        servo_pub_values.data.insert(0, [s1_bwd_1, s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])
+		elif max_idx==3:
+                        servo_pub_values.data.insert(0, [s1_stop, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+		elif max_idx==4:
+                        servo_pub_values.data.insert(0, [s1_fwd_1, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+		elif max_idx==5:
+                        servo_pub_values.data.insert(0, [s1_bwd_1, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+		elif max_idx==6:
+                        servo_pub_values.data.insert(0, [s1_stop, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+		elif max_idx==7:
+                        servo_pub_values.data.insert(0, [s1_fwd_1, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+		elif max_idx==8:
+                        servo_pub_values.data.insert(0, [s1_bwd_1, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
 
-		#servo_pub.publish(int_arr)
+
+		actions_batch.append(current_action_state)
+
+		servo_pub.publish(servo_pub_values)
 		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
 
 		a=2	
@@ -172,8 +199,8 @@ def listener():
 		
 		#build int16MultiArray with stop values for all servos (command uses values for 8 servos)
 		#there are 32 possible actions, e.g. stop_state = [1,0,0,0......]
-		#stop_val = 380,380,380,380,380,380,380,380
-		#servo_pub.publish(stop_val)
+		servo_pub_values.data.insert(0, [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])
+		servo_pub.publish(servo_pub_values)
 		a=3
 	
 	elif a==3:
