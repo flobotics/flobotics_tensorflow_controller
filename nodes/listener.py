@@ -41,6 +41,14 @@ s2_bwd_1 = 365
 sx0 = 1050  #do nothing value for not-used servos
 
 
+
+#   degree      force1      force2
+#         |
+#         |         /\         /\
+# --------|--------/  \-------/  \---------
+#
+# for degree we reward only the direct reaching of the angle_goal, for force1 and force2, we reward with a little pyramid, so that it does not need to be exactly there (is that right??)
+#
 def build_reward_state():
 	f_list1_length = force_reward_max - (force_reward_length/2)
 	f_list1 = [(x==1050) for x in range(f_list1_length)]
@@ -79,6 +87,9 @@ def build_reward_state():
 	states.extend(f2)
 	print "length of states >%d>" %len(states)
 
+
+# we get the current state, that means, current degree and current forces. 
+# We build a list, like the states-list, so we can compute reward
 def get_current_state():
 	a = [(x==current_degree) for x in range(angle_possible_max)]
 	b = [(x==current_force_1) for x in range(force_max_value)]
@@ -90,18 +101,22 @@ def get_current_state():
 	print "length curr-state d >%d<" %len(d)
 	return d
 
-
+# callback which delivers us periodically the adc values of the force sensors
+# adc values are floats from 0.0 to 5.0.  we convert them to int from 0-1023
 def adc_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "adc heard %s", data.data)
     rospy.loginfo("adc-val0: %f", data.data[0])
     rospy.loginfo("adc-val1: %f", data.data[1])
-    current_force_1 = data.data[0]
-    current_force_2 = data.data[1]
+    current_force_1 = (1023/5.0)*data.data[0]
+    current_force_2 = (1023/5.0)*data.data[1]
     
+#callback which delivers us periodically the degree, from 0-200 degree
 def degree_callback(data):
     rospy.loginfo(rospy.get_caller_id() + "degree heard %f", data.data)
     current_degree = data.data
 
+#the main thread/program
+#it runs in a loop, todo something and learn to reach the angle_goal (in degree)
 def listener():
 
     rospy.init_node('listener', anonymous=True)
@@ -133,12 +148,14 @@ def listener():
     actions_batch = []
     
 
-
+    #connect callbacks, so that we periodically get our values, degree and force
     rospy.Subscriber("adc_pi_plus_pub", Float32MultiArray, adc_callback)
     rospy.Subscriber("degree", Float32, degree_callback)
     servo_pub = rospy.Publisher('servo_pwm_pi_sub', Int16MultiArray, queue_size=1)
 
+    #the loop runs at 1hz
     rate = rospy.Rate(1)
+
     a=0
     sum_writer_index = 0
     probability_of_random_action = 1
@@ -229,7 +246,7 @@ def listener():
 		#running the output-op and then the train_operation-op ?
 
 		state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
-		action_rewards = [0,0,0,0,0,0,0,0,0] #states[ + GAMMA * np.max(state_reward)  
+		action_rewards = [0,0,0,0,0,0,0,0,0] #states[current_action_state] + GAMMA * np.max(state_reward)  
 		rewards_batch.append(action_rewards)
 		rospy.loginfo("a3-rewards_batch >%s<", rewards_batch) 
 		rospy.loginfo("a3-state_batch >%s<", state_batch)
