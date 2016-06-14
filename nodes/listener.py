@@ -7,6 +7,10 @@ import tensorflow as tf
 import numpy as np
 import random
 
+####### description
+#### http://discourse.ros.org/t/robotic-humanoid-hand/188
+########
+
 
 NUM_STATES = 200+1024+1024  #possible degrees the joint could move, 1024 force values, two times
 NUM_ACTIONS = 9  #3^2=9      ,one stop-state, two different speed left, two diff.speed right, two servos
