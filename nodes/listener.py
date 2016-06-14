@@ -146,26 +146,34 @@ def listener():
     servo_pub_values.data = []
 
     while not rospy.is_shutdown():
-	rospy.loginfo("here")
 
 	if a==0:
+		rospy.loginfo("a0")
 		#get current state
 		state_batch.append(get_current_state())
+
+		action_rewards = [0,0,0,0,0,0,0,0,0] #states[ + GAMMA * np.max(state_reward)  
+                rewards_batch.append(action_rewards)
+
+		
 		a=1
-		rospy.loginfo("get_current_state >%s<", str(state_batch))
+		#rospy.loginfo("get_current_state >%s<", str(state_batch))
 	elif a==1:
+		rospy.loginfo("a1")
 		#instead of do random action with decreasing probability,i directly publish learned values which are at the beginning very random-like, or ? ==> publish 2 servo values
 		#random action is better to explore bigger state space
 
 		#probability_of_random_action -= 0.01
 
 		#build random action
-		if random.random <= probability_of_random_action :
-			current_action_state = np.zero([NUM_ACTIONS])
+		if random.random() <= probability_of_random_action :
+			rospy.loginfo("random")
+			current_action_state = np.zeros([NUM_ACTIONS])
 			rand = random.randrange(NUM_ACTIONS)
 			current_action_state[rand] = 1		
 			
 		else :
+			rospy.loginfo("NOTrandom")
 			#or we readout learned action
 			current_action_state = session.run(output, feed_dict={state: [state_batch[-1]]})
 
@@ -202,6 +210,7 @@ def listener():
 		a=2	
 
 	elif a==2:
+		rospy.loginfo("a2")
 		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
 		
 		#build int16MultiArray with stop values for all servos (command uses values for 8 servos)
@@ -211,6 +220,7 @@ def listener():
 		a=3
 	
 	elif a==3:
+		rospy.loginfo("a3")
 		#get current state, so we can perhaps reward this random action
  		state_batch.append(get_current_state())
 
@@ -220,7 +230,9 @@ def listener():
 
 		state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
 		action_rewards = [0,0,0,0,0,0,0,0,0] #states[ + GAMMA * np.max(state_reward)  
-		rewards_batch.append(action_rewards) 
+		rewards_batch.append(action_rewards)
+		rospy.loginfo("a3-rewards_batch >%s<", rewards_batch) 
+		rospy.loginfo("a3-state_batch >%s<", state_batch)
 		#use build_reward_state() to calc reward, if we have not reached goal_degree, we get no reward. If we have to much or too less force on the wire-ropes, we get no reward.
                 #compare states[0] up to states[angle_possible_max-1] with get_current_state()[0] to get_current_state()[angle_possible_max-1]  ???
                 #compare states[angle_possible_max] up to states[angle_possible_max + force_max_value-1] with get_current_state()[angle_possible_max] to get_current_state()[angle_possible_max + force_max_value-1]
