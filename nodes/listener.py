@@ -5,6 +5,8 @@ from std_msgs.msg import Float32
 from std_msgs.msg import Int16MultiArray
 import tensorflow as tf
 import numpy as np
+import random
+
 
 NUM_STATES = 200+1024+1024  #possible degrees the joint could move, 1024 force values, two times
 NUM_ACTIONS = 9  #3^2=9      ,one stop-state, two different speed left, two diff.speed right, two servos
@@ -146,12 +148,12 @@ def listener():
 		#get current state
 		state_batch.append(get_current_state())
 		a=1
-
+		rospy.loginfo("get_current_state >%s<", str(state_batch))
 	elif a==1:
 		#instead of do random action with decreasing probability,i directly publish learned values which are at the beginning very random-like, or ? ==> publish 2 servo values
 		#random action is better to explore bigger state space
 
-		probability_of_random_action -= 0.01
+		#probability_of_random_action -= 0.01
 
 		#build random action
 		if random.random <= probability_of_random_action :
@@ -161,10 +163,11 @@ def listener():
 			
 		else :
 			#or we readout learned action
-			#current_action_state = session.run(output, feed_dict={state: [state_batch]})
+			current_action_state = session.run(output, feed_dict={state: [state_batch[-1]]})
 
 		#get the index of the max value to map this value to an original-action
 		max_idx = np.argmax(current_action_state)
+		rospy.loginfo("max_idx >%d<", max_idx)
 		#how do i map 32 or even more values to the appropriate action?
 		if max_idx==0:
 			#2 servos stop
@@ -189,7 +192,7 @@ def listener():
 
 		actions_batch.append(current_action_state)
 
-		servo_pub.publish(servo_pub_values)
+		#servo_pub.publish(servo_pub_values)
 		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
 
 		a=2	
@@ -200,20 +203,20 @@ def listener():
 		#build int16MultiArray with stop values for all servos (command uses values for 8 servos)
 		#there are 32 possible actions, e.g. stop_state = [1,0,0,0......]
 		servo_pub_values.data.insert(0, [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])
-		servo_pub.publish(servo_pub_values)
+		#servo_pub.publish(servo_pub_values)
 		a=3
 	
 	elif a==3:
 		#get current state, so we can perhaps reward this random action
- 		# ?? state_batch.append(get_current_state())
+ 		state_batch.append(get_current_state())
 
 		# first run "output" , then run "train_operation" ?
 		#as we start from scratch, should it train with every step ? would be best, or?
 		#running the output-op and then the train_operation-op ?
 
-		state_reward = session.run(output, feed_dict={state: [state_batch]})
-		#action_rewards = 
-		#rewards_batch.append(action_rewards) 
+		state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
+		action_rewards = [0,0,0,0,0,0,0,0,0] #states[ + GAMMA * np.max(state_reward)  
+		rewards_batch.append(action_rewards) 
 		#use build_reward_state() to calc reward, if we have not reached goal_degree, we get no reward. If we have to much or too less force on the wire-ropes, we get no reward.
                 #compare states[0] up to states[angle_possible_max-1] with get_current_state()[0] to get_current_state()[angle_possible_max-1]  ???
                 #compare states[angle_possible_max] up to states[angle_possible_max + force_max_value-1] with get_current_state()[angle_possible_max] to get_current_state()[angle_possible_max + force_max_value-1]
@@ -221,7 +224,7 @@ def listener():
                 #add up all three rewards into one value ???
                 # ??? use this one reward value and the previous state and the current state for training ? how ?
 		
-		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch}
+		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
 		sum_writer.add_summary(result, sum_writer_index)
 		sum_writer_index += 1
 	
