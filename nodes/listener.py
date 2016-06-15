@@ -31,13 +31,13 @@ f2 = []
 states = []
 
 #variables for bad-mapping approach, s1=servo1 , s2=servo2,.... 
-s1_stop = 380
-s1_fwd_1 = 400
-s1_bwd_1 = 360
+s1_stop = 377
+s1_fwd_1 = 380
+s1_bwd_1 = 374
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
-s2_stop = 385
-s2_fwd_1 = 405
-s2_bwd_1 = 365
+s2_stop = 399
+s2_fwd_1 = 402
+s2_bwd_1 = 396
 sx0 = 1050  #do nothing value for not-used servos
 
 
@@ -205,23 +205,23 @@ def listener():
 		#how do i map 32 or even more values to the appropriate action?
 		if max_idx==0:
 			#2 servos stop
-			servo_pub_values.data.insert(0, [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])		
+			servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==1:
-			servo_pub_values.data.insert(0, [s1_fwd_1, s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])
+			servo_pub_values.data = [s1_fwd_1, s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==2:
-                        servo_pub_values.data.insert(0, [s1_bwd_1, s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])
+                        servo_pub_values.data = [s1_bwd_1, s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==3:
-                        servo_pub_values.data.insert(0, [s1_stop, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+                        servo_pub_values.data = [s1_stop, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==4:
-                        servo_pub_values.data.insert(0, [s1_fwd_1, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+                        servo_pub_values.data = [s1_fwd_1, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==5:
-                        servo_pub_values.data.insert(0, [s1_bwd_1, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+                        servo_pub_values.data = [s1_bwd_1, s2_fwd_1, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==6:
-                        servo_pub_values.data.insert(0, [s1_stop, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+                        servo_pub_values.data = [s1_stop, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==7:
-                        servo_pub_values.data.insert(0, [s1_fwd_1, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+                        servo_pub_values.data = [s1_fwd_1, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==8:
-                        servo_pub_values.data.insert(0, [s1_bwd_1, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0])
+                        servo_pub_values.data = [s1_bwd_1, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0]
 
 
 		actions_batch.append(current_action_state)
@@ -237,7 +237,7 @@ def listener():
 		
 		#build int16MultiArray with stop values for all servos (command uses values for 8 servos)
 		#there are 32 possible actions, e.g. stop_state = [1,0,0,0......]
-		servo_pub_values.data.insert(0, [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0])
+		servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		#servo_pub.publish(servo_pub_values)
 		a=3
 	
