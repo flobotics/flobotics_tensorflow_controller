@@ -47,7 +47,9 @@ sx0 = 1050  #do nothing value for not-used servos
 #         |         /\         /\
 # --------|--------/  \-------/  \---------
 #
-# for degree we reward only the direct reaching of the angle_goal, for force1 and force2, we reward with a little pyramid, so that it does not need to be exactly there (is that right??)
+# for degree we reward only the direct reaching of the angle_goal, 
+# for force1 and force2, we reward with a little pyramid, so that 
+# it does not need to be exactly there (is that right??)
 #
 def build_reward_state():
 	f_list1_length = force_reward_max - (force_reward_length/2)
@@ -104,15 +106,15 @@ def get_current_state():
 # callback which delivers us periodically the adc values of the force sensors
 # adc values are floats from 0.0 to 5.0.  we convert them to int from 0-1023
 def adc_callback(data):
-    rospy.loginfo(rospy.get_caller_id() + "adc heard %s", data.data)
-    rospy.loginfo("adc-val0: %f", data.data[0])
-    rospy.loginfo("adc-val1: %f", data.data[1])
+    #rospy.loginfo(rospy.get_caller_id() + "adc heard %s", data.data)
+    #rospy.loginfo("adc-val0: %f", data.data[0])
+    #rospy.loginfo("adc-val1: %f", data.data[1])
     current_force_1 = (1023/5.0)*data.data[0]
     current_force_2 = (1023/5.0)*data.data[1]
     
 #callback which delivers us periodically the degree, from 0-200 degree
 def degree_callback(data):
-    rospy.loginfo(rospy.get_caller_id() + "degree heard %f", data.data)
+    #rospy.loginfo(rospy.get_caller_id() + "degree heard %f", data.data)
     current_degree = data.data
 
 #the main thread/program
@@ -126,10 +128,13 @@ def listener():
 
     state = tf.placeholder("float", [None, NUM_STATES])
     targets = tf.placeholder("float", [None, NUM_ACTIONS])
+    #targets = tf.placeholder("float", [None])
 
     hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
+    h_w_hist = tf.histogram_summary("hidden_weights", hidden_weights)
 
     output = tf.matmul(state, hidden_weights)
+    o_hist = tf.histogram_summary("output", output)
 	
     with tf.name_scope("summaries"):
     	loss = tf.reduce_mean(tf.square(output - targets))
@@ -169,7 +174,7 @@ def listener():
 		#get current state
 		state_batch.append(get_current_state())
 
-		action_rewards = [0,0,0,0,0,0,0,0,0] #states[ + GAMMA * np.max(state_reward)  
+		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] #states[ + GAMMA * np.max(state_reward)  
                 rewards_batch.append(action_rewards)
 
 		
@@ -246,10 +251,10 @@ def listener():
 		#running the output-op and then the train_operation-op ?
 
 		state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
-		action_rewards = [0,0,0,0,0,0,0,0,0] #states[current_action_state] + GAMMA * np.max(state_reward)  
+		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]  #for test,use only reward for degree, not use force reward  
 		rewards_batch.append(action_rewards)
 		rospy.loginfo("a3-rewards_batch >%s<", rewards_batch) 
-		rospy.loginfo("a3-state_batch >%s<", state_batch)
+		#rospy.loginfo("a3-state_batch >%s<", state_batch)
 		#use build_reward_state() to calc reward, if we have not reached goal_degree, we get no reward. If we have to much or too less force on the wire-ropes, we get no reward.
                 #compare states[0] up to states[angle_possible_max-1] with get_current_state()[0] to get_current_state()[angle_possible_max-1]  ???
                 #compare states[angle_possible_max] up to states[angle_possible_max + force_max_value-1] with get_current_state()[angle_possible_max] to get_current_state()[angle_possible_max + force_max_value-1]
