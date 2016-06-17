@@ -278,29 +278,9 @@ def listener():
 		
 		#q-function ?
 		action_rewards = r + GAMMA * state_reward #np.max(state_reward) #   [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]   
-		rewards_batch.append(action_rewards.tolist())
+		rewards_batch.append(action_rewards.tolist()[0])
 		rospy.loginfo("a3-rewards_batch >%s<", rewards_batch) 
 		#rospy.loginfo("a3-state_batch >%s<", state_batch)
-
-
-# the error the above line produces
-
-		
-#	[INFO] [WallTime: 1466173268.044297] a3-rewards_batch >[[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [[0.965092122554779, 0.9984378814697266, 1.0046687126159668, 0.9839721322059631, 0.9959143996238708, 1.038711428642273, 0.9991259574890137, 0.9968912601470947, 1.0089023113250732]]]<
-#Traceback (most recent call last):
-#  File "/home/ros/catkin_ws/src/tensorflow_controller/nodes/listener.py", line 301, in <module>
-#    listener()
-#  File "/home/ros/catkin_ws/src/tensorflow_controller/nodes/listener.py", line 285, in listener
-#    _, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
-#  File "/usr/local/lib/python2.7/dist-packages/tensorflow/python/client/session.py", line 340, in run
-#    run_metadata_ptr)
-#  File "/usr/local/lib/python2.7/dist-packages/tensorflow/python/client/session.py", line 548, in _run
-#    np_val = np.array(subfeed_val, dtype=subfeed_t.dtype.as_numpy_dtype)
-#ValueError: setting an array element with a sequence.
-	
-
-
-
 
 		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
 		sum_writer.add_summary(result, sum_writer_index)
