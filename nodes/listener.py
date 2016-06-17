@@ -130,14 +130,18 @@ def listener():
     targets = tf.placeholder("float", [None, NUM_ACTIONS])
     #targets = tf.placeholder("float", [None])
 
-    hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
+    #hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
+    hidden_weights = tf.Variable(tf.truncated_normal([NUM_STATES, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1))
     h_w_hist = tf.histogram_summary("hidden_weights", hidden_weights)
 
     output = tf.matmul(state, hidden_weights)
     o_hist = tf.histogram_summary("output", output)
+
+    #readout_action = tf.reduce_sum(tf.mul(output, targets), reduction_indices=1)
 	
     with tf.name_scope("summaries"):
     	loss = tf.reduce_mean(tf.square(output - targets))
+	#loss = tf.reduce_mean(tf.square(targets - readout_action))
     	tf.scalar_summary("loss", loss)
 
     merged = tf.merge_all_summaries()
