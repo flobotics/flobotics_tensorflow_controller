@@ -51,6 +51,17 @@ sx0 = 1050  #do nothing value for not-used servos
 # for force1 and force2, we reward with a little pyramid, so that 
 # it does not need to be exactly there (is that right??)
 #
+# do i need to put in also the angle_goal, like degree? So that it learns, to get degree to the same value as angle_goal?
+#
+#
+#
+# angle_goal   degree      force1      force2
+#    |               |
+#    |               |         /\         /\
+# ---|---------------|--------/  \-------/  \---------
+
+
+
 def build_reward_state():
 	f_list1_length = force_reward_max - (force_reward_length/2)
 	f_list1 = [(x==1050) for x in range(f_list1_length)]
@@ -128,18 +139,19 @@ def listener():
 
     state = tf.placeholder("float", [None, NUM_STATES])
     targets = tf.placeholder("float", [None, NUM_ACTIONS])
-    #targets = tf.placeholder("float", [None])
 
     #hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
-    hidden_weights = tf.Variable(tf.truncated_normal([NUM_STATES, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1))
+    hidden_weights = tf.Variable(tf.truncated_normal([NUM_STATES, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1), name="hidden_weights")
     h_w_hist = tf.histogram_summary("hidden_weights", hidden_weights)
+
+    #bias needed?
 
     output = tf.matmul(state, hidden_weights)
     o_hist = tf.histogram_summary("output", output)
 
     #readout_action = tf.reduce_sum(tf.mul(output, targets), reduction_indices=1)
 	
-    with tf.name_scope("summaries"):
+    with tf.name_scope("loss_summary"):
     	loss = tf.reduce_mean(tf.square(output - targets))
 	#loss = tf.reduce_mean(tf.square(targets - readout_action))
     	tf.scalar_summary("loss", loss)
@@ -186,10 +198,9 @@ def listener():
 		#rospy.loginfo("get_current_state >%s<", str(state_batch))
 	elif a==1:
 		rospy.loginfo("a1")
-		#instead of do random action with decreasing probability,i directly publish learned values which are at the beginning very random-like, or ? ==> publish 2 servo values
 		#random action is better to explore bigger state space
 
-		#probability_of_random_action -= 0.01
+		probability_of_random_action -= 0.01
 
 		#build random action
 		if random.random() <= probability_of_random_action :
@@ -238,9 +249,6 @@ def listener():
 	elif a==2:
 		rospy.loginfo("a2")
 		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
-		
-		#build int16MultiArray with stop values for all servos (command uses values for 8 servos)
-		#there are 32 possible actions, e.g. stop_state = [1,0,0,0......]
 		servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		#servo_pub.publish(servo_pub_values)
 		a=3
@@ -250,11 +258,10 @@ def listener():
 		#get current state, so we can perhaps reward this random action
  		state_batch.append(get_current_state())
 
-		# first run "output" , then run "train_operation" ?
-		#as we start from scratch, should it train with every step ? would be best, or?
-		#running the output-op and then the train_operation-op ?
-
+		#we get the action that the NN would do 
 		state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
+
+		#we calculate the reward
 		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]  #for test,use only reward for degree, not use force reward  
 		rewards_batch.append(action_rewards)
 		rospy.loginfo("a3-rewards_batch >%s<", rewards_batch) 
