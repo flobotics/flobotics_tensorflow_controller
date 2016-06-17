@@ -22,8 +22,8 @@ force_max_value = 1024     #how much force values possible
 angle_goal = 90
 angle_possible_max = 200  #how many degrees the angle can go max
 current_degree = 0
-current_force_1 = 0.0
-current_force_2 = 0.0
+current_force_1 = 0
+current_force_2 = 0
 
 angle = []
 f1 = []
@@ -183,6 +183,8 @@ def listener():
     servo_pub_values = Int16MultiArray()
     servo_pub_values.data = []
 
+
+
     while not rospy.is_shutdown():
 
 	if a==0:
@@ -255,23 +257,30 @@ def listener():
 	
 	elif a==3:
 		rospy.loginfo("a3")
-		#get current state, so we can perhaps reward this random action
- 		state_batch.append(get_current_state())
 
 		#we get the action that the NN would do 
 		state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
 
-		#we calculate the reward
-		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]  #for test,use only reward for degree, not use force reward  
+		#get current state, so we can perhaps reward this random action
+                last_state = get_current_state()
+                state_batch.append(last_state)
+
+
+		#we calculate the reward, for that we use states[] from build_reward_state()
+		#the reward for reaching the degree/angle_goal
+		r1 = last_state[current_degree] + states[current_degree]
+		#the reward for holding a specified force on wire-1
+		r2 = last_state[angle_possible_max-1 + current_force_1] + states[angle_possible_max-1 + current_force_1]
+		#the reward for holding a specified force on wire-2
+		r3 = last_state[angle_possible_max-1 + force_max_value + current_force_2] + states[angle_possible_max-1 + force_max_value + current_force_2]
+		#add them
+		r = r1 + r2 + r3
+		
+		#q-function ?
+		action_rewards = r + GAMMA * state_reward #np.max(state_reward) #   [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]   
 		rewards_batch.append(action_rewards)
 		rospy.loginfo("a3-rewards_batch >%s<", rewards_batch) 
 		#rospy.loginfo("a3-state_batch >%s<", state_batch)
-		#use build_reward_state() to calc reward, if we have not reached goal_degree, we get no reward. If we have to much or too less force on the wire-ropes, we get no reward.
-                #compare states[0] up to states[angle_possible_max-1] with get_current_state()[0] to get_current_state()[angle_possible_max-1]  ???
-                #compare states[angle_possible_max] up to states[angle_possible_max + force_max_value-1] with get_current_state()[angle_possible_max] to get_current_state()[angle_possible_max + force_max_value-1]
-		#compare the second force value like the above one
-                #add up all three rewards into one value ???
-                # ??? use this one reward value and the previous state and the current state for training ? how ?
 		
 		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
 		sum_writer.add_summary(result, sum_writer_index)
