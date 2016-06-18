@@ -16,15 +16,16 @@ NUM_STATES = 200+1024+1024  #possible degrees the joint could move, 1024 force v
 NUM_ACTIONS = 9  #3^2=9      ,one stop-state, two different speed left, two diff.speed right, two servos
 GAMMA = 0.5
 
-force_reward_max = 150  #where should the max point be
-force_reward_length = 100  #how long/big the area around max
+force_reward_max = 15  #where should the max/middle point be, we get force values from 0.0 - 1023.0 (float),
+force_reward_length = 10  #how long/big the area around max
 force_max_value = 1024     #how much force values possible
-angle_goal = 90
+angle_goal = 5		#to which angle should it go, get reward
 angle_possible_max = 200  #how many degrees the angle can go max
-current_degree = 0
-current_force_1 = 0
-current_force_2 = 0
+current_degree = 0     #will be filled periodically from  callback-function
+current_force_1 = 0    #will be filled periodically from  callback-function
+current_force_2 = 0    #will be filled periodically from  callback-function
 
+#lists we use for build reward list
 angle = []
 f1 = []
 f2 = []
@@ -115,15 +116,15 @@ def get_current_state():
 	return d
 
 # callback which delivers us periodically the adc values of the force sensors
-# adc values are floats from 0.0 to 5.0.  we convert them to int from 0-1023
+# adc values are floats from 0.0 to 5.0.  we convert them to int from 0.0-1023.0  (float)
 def adc_callback(data):
     #rospy.loginfo(rospy.get_caller_id() + "adc heard %s", data.data)
-    #rospy.loginfo("adc-val0: %f", data.data[0])
-    #rospy.loginfo("adc-val1: %f", data.data[1])
+    #rospy.loginfo("adc-val0: %f", (1023/5.0)*data.data[0])
+    #rospy.loginfo("adc-val1: %f", (1023/5.0)*data.data[1])
     current_force_1 = (1023/5.0)*data.data[0]
     current_force_2 = (1023/5.0)*data.data[1]
     
-#callback which delivers us periodically the degree, from 0-200 degree
+#callback which delivers us periodically the degree, from 0.0-200.0 degree (float)
 def degree_callback(data):
     #rospy.loginfo(rospy.get_caller_id() + "degree heard %f", data.data)
     current_degree = data.data
@@ -243,7 +244,7 @@ def listener():
 
 		actions_batch.append(current_action_state)
 
-		#servo_pub.publish(servo_pub_values)
+		servo_pub.publish(servo_pub_values)
 		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
 
 		a=2	
@@ -252,7 +253,7 @@ def listener():
 		rospy.loginfo("a2")
 		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
 		servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
-		#servo_pub.publish(servo_pub_values)
+		servo_pub.publish(servo_pub_values)
 		a=3
 	
 	elif a==3:
