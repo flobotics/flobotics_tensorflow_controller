@@ -194,10 +194,11 @@ def listener():
 	if a==0:
 		rospy.loginfo("build last_state and use stop-action, or load checkpoint file and go on from there")
 		#get current state
-		current_state = get_current_state()
-		state_batch.append(current_state)
+		state_from_env = get_current_state()
+		state_batch.append(state_from_env)
+
 		#for the first time we run, we build last_state with 4-last-states
-		last_state = np.stack(tuple(current_state for _ in range(4)), axis=1)
+		last_state = np.stack(tuple(state_from_env for _ in range(4)), axis=1)
 		print("a0 last_state.shape", last_state.shape)		
 
 		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] #states[ + GAMMA * np.max(state_reward)  
@@ -207,26 +208,26 @@ def listener():
 		a=1
 		#rospy.loginfo("get_current_state >%s<", str(state_batch))
 	elif a==1:
-		rospy.loginfo("a1")
+		rospy.loginfo("a1 publish random or learned action")
 		#random action is better to explore bigger state space
 
 		probability_of_random_action -= 0.01
 
 		#build random action
 		if random.random() <= probability_of_random_action :
-			rospy.loginfo("random")
+			rospy.loginfo("random action")
 			current_action_state = np.zeros([NUM_ACTIONS])
 			rand = random.randrange(NUM_ACTIONS)
 			current_action_state[rand] = 1		
 			
 		else :
-			rospy.loginfo("NOTrandom")
+			rospy.loginfo("learned action")
 			#or we readout learned action
 			current_action_state = session.run(output, feed_dict={state: [state_batch[-1]]})
 
 		#get the index of the max value to map this value to an original-action
 		max_idx = np.argmax(current_action_state)
-		rospy.loginfo("max_idx >%d<", max_idx)
+		rospy.loginfo("action we publish >%d<", max_idx)
 		#how do i map 32 or even more values to the appropriate action?
 		if max_idx==0:
 			#2 servos stop
@@ -258,14 +259,14 @@ def listener():
 		a=2	
 
 	elif a==2:
-		rospy.loginfo("a2")
+		rospy.loginfo("a2 publish stop values")
 		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
 		servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		servo_pub.publish(servo_pub_values)
 		a=3
 	
 	elif a==3:
-		rospy.loginfo("a3")
+		rospy.loginfo("a3 train")
 
 		#we get our state
 		state_from_env = get_current_state()
