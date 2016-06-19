@@ -6,6 +6,7 @@ from std_msgs.msg import Int16MultiArray
 import tensorflow as tf
 import numpy as np
 import random
+from collections import deque
 
 ####### description
 #### http://discourse.ros.org/t/robotic-humanoid-hand/188
@@ -184,14 +185,20 @@ def listener():
     servo_pub_values = Int16MultiArray()
     servo_pub_values.data = []
 
-
+    observations = deque()
+    MEMORY_SIZE = 10000
+    OBSERVATION_STEPS = 0
 
     while not rospy.is_shutdown():
 
 	if a==0:
-		rospy.loginfo("a0")
+		rospy.loginfo("build last_state and use stop-action, or load checkpoint file and go on from there")
 		#get current state
-		state_batch.append(get_current_state())
+		current_state = get_current_state()
+		state_batch.append(current_state)
+		#for the first time we run, we build last_state with 4-last-states
+		last_state = np.stack(tuple(current_state for _ in range(4)), axis=1)
+		print("a0 last_state.shape", last_state.shape)		
 
 		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] #states[ + GAMMA * np.max(state_reward)  
                 rewards_batch.append(action_rewards)
@@ -243,6 +250,7 @@ def listener():
 
 
 		actions_batch.append(current_action_state)
+		last_action = current_action_state
 
 		servo_pub.publish(servo_pub_values)
 		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
@@ -259,35 +267,52 @@ def listener():
 	elif a==3:
 		rospy.loginfo("a3")
 
-		#we get the action that the NN would do 
-		state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
+		#we get our state
+		state_from_env = get_current_state()
 
-		#get current state, so we can perhaps reward this random action
-                last_state = get_current_state()
-                state_batch.append(last_state)
+		reshaped_state_from_env = np.reshape(state_from_env, (2248,1))
+		current_state = np.append(last_state[:,1:], reshaped_state_from_env, axis=1)
+		print("a3 current_state.shape", current_state.shape)
 
 
 		#we calculate the reward, for that we use states[] from build_reward_state()
-		#the reward for reaching the degree/angle_goal
-		r1 = last_state[current_degree] + states[current_degree]
-		#the reward for holding a specified force on wire-1
-		r2 = last_state[angle_possible_max-1 + current_force_1] + states[angle_possible_max-1 + current_force_1]
-		#the reward for holding a specified force on wire-2
-		r3 = last_state[angle_possible_max-1 + force_max_value + current_force_2] + states[angle_possible_max-1 + force_max_value + current_force_2]
-		#add them
-		r = r1 + r2 + r3
-		
-		#q-function ?
-		action_rewards = r + GAMMA * state_reward #np.max(state_reward) #   [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]   
-		rewards_batch.append(action_rewards.tolist()[0])
-		rospy.loginfo("a3-rewards_batch >%s<", rewards_batch) 
-		#rospy.loginfo("a3-state_batch >%s<", state_batch)
+                #the reward for reaching the degree/angle_goal
+                r1 = state_from_env[current_degree] + states[current_degree]
+                #the reward for holding a specified force on wire-1
+                r2 = state_from_env[angle_possible_max-1 + current_force_1] + states[angle_possible_max-1 + current_force_1]
+                #the reward for holding a specified force on wire-2
+                r3 = state_from_env[angle_possible_max-1 + force_max_value + current_force_2] + states[angle_possible_max-1 + force_max_value + current_force_2]
+                #add them
+                r = r1 + r2 + r3
 
-		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
-		sum_writer.add_summary(result, sum_writer_index)
-		sum_writer_index += 1
+		#we get the action that the NN would do 
+		# state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
+		state_reward = session.run(output, feed_dict={state: [state_from_env]})
+
+                #q-function ?
+                reward = r + GAMMA * state_reward #np.max(state_reward) #   [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]   
+                rewards_batch.append(reward.tolist()[0])
+                rospy.loginfo("a3-rewards_batch >%s<", rewards_batch)
+                #rospy.loginfo("a3-state_batch >%s<", state_batch)
+
+
+		#we append it to our observations
+		observations.append((last_state, last_action, reward, current_state))
+		if len(observations) > MEMORY_SIZE:
+			observations.popleft()
+		
+		if len(observations) > OBSERVATION_STEPS:
+			#train
+			print("train")
+
+			_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
+			sum_writer.add_summary(result, sum_writer_index)
+			sum_writer_index += 1
+		
+		last_state = current_state
+		#last_action = choose_next_action(),  that is a1 in this loop
+
 	
-		#in deep-q pong of deepmind they use the last 4 frames, to get a feeling for the direction of the ball, this means i must use, the last 4 states together. Does this mean i must wait 4 states at the very first beginning?	
 		a=1
 
 	rate.sleep()
