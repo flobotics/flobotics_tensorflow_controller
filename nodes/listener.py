@@ -204,7 +204,7 @@ def listener():
 		#for the first time we run, we build last_state with 4-last-states
 		last_state = np.stack(tuple(state_from_env for _ in range(4)), axis=1)
 		print("a0 last_state.shape", last_state.shape)		
-
+		
 		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] #states[ + GAMMA * np.max(state_reward)  
                 #action_rewards = [0.0]
 		rewards_batch.append(action_rewards)
@@ -289,21 +289,13 @@ def listener():
                 #the reward for holding a specified force on wire-2
                 r3 = state_from_env[angle_possible_max-1 + force_max_value + current_force_2] + states[angle_possible_max-1 + force_max_value + current_force_2]
                 #add them
-                r = r1 + r2 + r3
+                reward = r1 + r2 + r3
 
-		#we get the action that the NN would do 
-		# state_reward = session.run(output, feed_dict={state: [state_batch[-1]]})
-		state_reward = session.run(output, feed_dict={state: [state_from_env]})
-
-                #q-function ?
-                reward = r + GAMMA * state_reward #np.max(state_reward) #   [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]   
-                rewards_batch.append(reward.tolist()[0])
-                #rospy.loginfo("a3-rewards_batch >%s<", rewards_batch)
-                #rospy.loginfo("a3-state_batch >%s<", state_batch)
+		print("reward", reward)
 
 
 		#we append it to our observations
-		observations.append((last_state, last_action, r, current_state))
+		observations.append((last_state, last_action, reward, current_state))
 		if len(observations) > MEMORY_SIZE:
 			observations.popleft()
 		
@@ -312,13 +304,26 @@ def listener():
 			print("train")
 
 			mini_batch = random.sample(observations, MINI_BATCH_SIZE)
-			OBS_LAST_STATE_INDEX = range(5)
-        		#previous_states = [d[0] for d in mini_batch]
-        		previous_states = [d[OBS_LAST_STATE_INDEX] for d in mini_batch]
-			# the above line produces: previous_states = [d[OBS_LAST_STATE_INDEX] for d in mini_batch]
-			#                          TypeError: tuple indices must be integers, not list
-			#
-			print("prev-states", previous_states)
+        		previous_states = [d[0] for d in mini_batch]
+			print("t-prev-states len", len(previous_states))
+        		actions = [d[1] for d in mini_batch]
+			print("t-actions", actions)
+			rewards = [d[2] for d in mini_batch]
+			print("t-rewards", rewards)
+			current_states = [d[3] for d in mini_batch]
+			print("t-cur-state len", len(current_states))
+			print("t-cur-state type", type(current_states))
+			print("t-cur-state[0] len", len(current_states[0]))
+			agents_expected_reward = []
+
+			print("t-prev-states", previous_states)
+
+			agents_reward_per_action = session.run(output, feed_dict={state: [current_states[0]]})
+			print("t-agents-reward-per-action", agents_reward_per_action)
+
+			for i in range(len(mini_batch)):
+				agents_expected_reward.append(rewards[i] + FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
+
 
         		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
 
