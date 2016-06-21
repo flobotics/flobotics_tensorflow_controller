@@ -42,7 +42,13 @@ s2_fwd_1 = 402
 s2_bwd_1 = 396
 sx0 = 1050  #do nothing value for not-used servos
 
+observations = deque()
+state_batch = []
+rewards_batch = []
+actions_batch = []
 
+
+MINI_BATCH_SIZE = 5 
 
 #   degree      force1      force2
 #         |
@@ -130,6 +136,7 @@ def degree_callback(data):
     #rospy.loginfo(rospy.get_caller_id() + "degree heard %f", data.data)
     current_degree = data.data
 
+
 #the main thread/program
 #it runs in a loop, todo something and learn to reach the angle_goal (in degree)
 def listener():
@@ -166,10 +173,6 @@ def listener():
 
     session.run(tf.initialize_all_variables())
 
-    state_batch = []
-    rewards_batch = []
-    actions_batch = []
-    
 
     #connect callbacks, so that we periodically get our values, degree and force
     rospy.Subscriber("adc_pi_plus_pub", Float32MultiArray, adc_callback)
@@ -180,14 +183,15 @@ def listener():
     rate = rospy.Rate(1)
 
     a=0
-    sum_writer_index = 0
     probability_of_random_action = 1
     servo_pub_values = Int16MultiArray()
     servo_pub_values.data = []
 
-    observations = deque()
+    last_action = np.zeros([NUM_ACTIONS])
+    last_action[0] = 1   #stop action
+    sum_writer_index = 0
     MEMORY_SIZE = 10000
-    OBSERVATION_STEPS = 0
+    OBSERVATION_STEPS = 5
 
     while not rospy.is_shutdown():
 
@@ -202,10 +206,11 @@ def listener():
 		print("a0 last_state.shape", last_state.shape)		
 
 		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] #states[ + GAMMA * np.max(state_reward)  
-                rewards_batch.append(action_rewards)
+                #action_rewards = [0.0]
+		rewards_batch.append(action_rewards)
 
 		
-		a=1
+		a=2
 		#rospy.loginfo("get_current_state >%s<", str(state_batch))
 	elif a==1:
 		rospy.loginfo("a1 publish random or learned action")
@@ -293,12 +298,12 @@ def listener():
                 #q-function ?
                 reward = r + GAMMA * state_reward #np.max(state_reward) #   [0.,0.,0.,0.,0.,0.,0.,0.,0.] # [states[current_degree] + GAMMA * np.max(state_reward)]   
                 rewards_batch.append(reward.tolist()[0])
-                rospy.loginfo("a3-rewards_batch >%s<", rewards_batch)
+                #rospy.loginfo("a3-rewards_batch >%s<", rewards_batch)
                 #rospy.loginfo("a3-state_batch >%s<", state_batch)
 
 
 		#we append it to our observations
-		observations.append((last_state, last_action, reward, current_state))
+		observations.append((last_state, last_action, r, current_state))
 		if len(observations) > MEMORY_SIZE:
 			observations.popleft()
 		
@@ -306,7 +311,17 @@ def listener():
 			#train
 			print("train")
 
-			_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
+			mini_batch = random.sample(observations, MINI_BATCH_SIZE)
+			OBS_LAST_STATE_INDEX = range(5)
+        		#previous_states = [d[0] for d in mini_batch]
+        		previous_states = [d[OBS_LAST_STATE_INDEX] for d in mini_batch]
+			# the above line produces: previous_states = [d[OBS_LAST_STATE_INDEX] for d in mini_batch]
+			#                          TypeError: tuple indices must be integers, not list
+			#
+			print("prev-states", previous_states)
+
+        		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
+
 			sum_writer.add_summary(result, sum_writer_index)
 			sum_writer_index += 1
 		
