@@ -163,11 +163,11 @@ def listener():
     output = tf.matmul(state, hidden_weights)
     o_hist = tf.histogram_summary("output", output)
 
-    #readout_action = tf.reduce_sum(tf.mul(output, targets), reduction_indices=1)
+    readout_action = tf.reduce_sum(tf.mul(output, targets), reduction_indices=1)
 	
     with tf.name_scope("loss_summary"):
-    	loss = tf.reduce_mean(tf.square(output - targets))
-	#loss = tf.reduce_mean(tf.square(targets - readout_action))
+    	#loss = tf.reduce_mean(tf.square(output - targets))
+	loss = tf.reduce_mean(tf.square(targets - readout_action))
     	tf.scalar_summary("loss", loss)
 
     merged = tf.merge_all_summaries()
@@ -290,8 +290,6 @@ def listener():
 		#print("a3 current_state.shape", current_state.shape)
 		#---->('a3 current_state.shape', (2448, 1, 4))
 
-		test_s = np.reshape(current_state, (NUM_STATES*4, 1))
-		print("test_s shape", test_s.shape)
 
 		#we calculate the reward, for that we use states[] from build_reward_state()
                 #the reward for reaching the degree/angle_goal
@@ -326,17 +324,17 @@ def listener():
 			print("t-cur-state len", len(current_states))
 			print("t-cur-state type", type(current_states))
 			print("t-cur-state[0] len", len(current_states[0]))
-			test_c = np.reshape(current_states, (5, NUM_STATES*4))
-			print("t-test_c shape", test_c.shape)
-					
+			current_states = np.reshape(current_states, (5, NUM_STATES*4))
+			print("t-current_states shape", current_states.shape)
+			previous_states = np.reshape(previous_states, (5, NUM_STATES*4))
+			print("t-previous_states shape", previous_states.shape)
 		
 
 
 			agents_expected_reward = []
 			
 			#print("t-prev-states", previous_states)
-			#wrong ???	
-			agents_reward_per_action = session.run(output, feed_dict={state: [test_c]})
+			agents_reward_per_action = session.run(output, feed_dict={state: current_states})
 
 
 			print("t-agents-reward-per-action", agents_reward_per_action)
@@ -345,7 +343,11 @@ def listener():
 				agents_expected_reward.append(rewards[i] + FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
 
 
-        		_, result = session.run([train_operation, merged], feed_dict={state: state_batch, targets: rewards_batch})
+
+			##wrong??
+
+			print("at-agents_expected_reward", agents_expected_reward)
+        		_, result = session.run([train_operation, merged], feed_dict={state: previous_states, targets: actions, output: agents_expected_reward})
 
 			sum_writer.add_summary(result, sum_writer_index)
 			sum_writer_index += 1
