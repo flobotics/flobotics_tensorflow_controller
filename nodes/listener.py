@@ -197,6 +197,7 @@ def listener():
     sum_writer_index = 0
     MEMORY_SIZE = 10000
     OBSERVATION_STEPS = 5
+    FUTURE_REWARD_DISCOUNT = 0.9
 
     while not rospy.is_shutdown():
 
@@ -221,7 +222,7 @@ def listener():
 		probability_of_random_action -= 0.01
 
 		#build random action
-		if random.random() <= probability_of_random_action :
+		if random.random() >= probability_of_random_action :
 			rospy.loginfo("random action")
 			current_action = np.zeros([NUM_ACTIONS])
 			rand = random.randrange(NUM_ACTIONS)
@@ -230,8 +231,8 @@ def listener():
 		else :
 			rospy.loginfo("learned action")
 			#or we readout learned action
-			#current_action = session.run(output, feed_dict={state: [state_batch[-1]]})
-			current_action = session.run(output, feed_dict={state: [last_state[-1]]})
+			last_state_array = np.reshape(last_state, (NUM_STATES*4))
+			current_action = session.run(output, feed_dict={state: [last_state_array]})
 
 		#get the index of the max value to map this value to an original-action
 		max_idx = np.argmax(current_action)
@@ -325,22 +326,17 @@ def listener():
 			print("t-cur-state len", len(current_states))
 			print("t-cur-state type", type(current_states))
 			print("t-cur-state[0] len", len(current_states[0]))
-			test_c = np.reshape(current_states, (5, NUM_STATES*4, 1))
+			test_c = np.reshape(current_states, (5, NUM_STATES*4))
 			print("t-test_c shape", test_c.shape)
+					
+		
+
 
 			agents_expected_reward = []
 			
 			#print("t-prev-states", previous_states)
-
-			agents_reward_per_action = session.run(output, feed_dict={state: [test_c[0]]})
-			#    agents_reward_per_action = session.run(output, feed_dict={state: [test_c[0]]})
-			#  File "/usr/local/lib/python2.7/dist-packages/tensorflow/python/client/session.py", line 340, in run
-			#    run_metadata_ptr)
-			#  File "/usr/local/lib/python2.7/dist-packages/tensorflow/python/client/session.py", line 553, in _run
-			#    % (np_val.shape, subfeed_t.name, str(subfeed_t.get_shape())))
-			#ValueError: Cannot feed value of shape (1, 9792, 1) for Tensor u'Placeholder:0', which has shape '(?, 9792)'
-
-
+			#wrong ???	
+			agents_reward_per_action = session.run(output, feed_dict={state: [test_c]})
 
 
 			print("t-agents-reward-per-action", agents_reward_per_action)
