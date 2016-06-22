@@ -13,8 +13,8 @@ from collections import deque
 ########
 
 
-NUM_STATES = 200+1024+1024  #possible degrees the joint could move, 1024 force values, two times
-NUM_ACTIONS = 9  #3^2=9      ,one stop-state, two different speed left, two diff.speed right, two servos
+NUM_STATES = 200+200+1024+1024  #200 degree angle_goal, 200 possible degrees the joint could move, 1024 force values, two times
+NUM_ACTIONS = 9  #3^2=9      ,one stop-state, one different speed left, one diff.speed right, two servos
 GAMMA = 0.5
 
 force_reward_max = 15  #where should the max/middle point be, we get force values from 0.0 - 1023.0 (float),
@@ -43,9 +43,9 @@ s2_bwd_1 = 396
 sx0 = 1050  #do nothing value for not-used servos
 
 observations = deque()
-state_batch = []
-rewards_batch = []
-actions_batch = []
+#state_batch = []
+#rewards_batch = []
+#actions_batch = []
 
 
 MINI_BATCH_SIZE = 5 
@@ -59,14 +59,6 @@ MINI_BATCH_SIZE = 5
 # for force1 and force2, we reward with a little pyramid, so that 
 # it does not need to be exactly there (is that right??)
 #
-# do i need to put in also the angle_goal, like degree? So that it learns, to get degree to the same value as angle_goal?
-#
-#
-#
-# angle_goal   degree      force1      force2
-#    |               |
-#    |               |         /\         /\
-# ---|---------------|--------/  \-------/  \---------
 
 
 
@@ -101,7 +93,7 @@ def build_reward_state():
         #print(f2)
 
 	angle = [(x==angle_goal) for x in range(angle_possible_max)]
-	#print(angle)
+	#print(angle)	
 
 	states.extend(angle)
 	states.extend(f1)
@@ -111,11 +103,22 @@ def build_reward_state():
 
 # we get the current state, that means, current degree and current forces. 
 # We build a list, like the states-list, so we can compute reward
+#
+#
+#
+# angle_goal   degree      force1      force2
+#    |               |
+#    |               |         /\         /\
+# ---|---------------|--------/  \-------/  \---------
+
+
 def get_current_state():
+	a1 = [(x==angle_goal) for x in range(angle_possible_max)]
 	a = [(x==current_degree) for x in range(angle_possible_max)]
 	b = [(x==current_force_1) for x in range(force_max_value)]
 	c = [(x==current_force_2) for x in range(force_max_value)]
 	d = []
+	d.extend(a1)
 	d.extend(a)
 	d.extend(b)
 	d.extend(c)
@@ -153,7 +156,9 @@ def listener():
     hidden_weights = tf.Variable(tf.truncated_normal([NUM_STATES, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1), name="hidden_weights")
     h_w_hist = tf.histogram_summary("hidden_weights", hidden_weights)
 
-    #bias needed?
+    #bias
+    biases = tf.Variable(tf.zeros([NUM_ACTIONS]), name="biases")
+    b_hist = tf.histogram_summary("biases", biases) 
 
     output = tf.matmul(state, hidden_weights)
     o_hist = tf.histogram_summary("output", output)
@@ -196,42 +201,41 @@ def listener():
     while not rospy.is_shutdown():
 
 	if a==0:
-		rospy.loginfo("build last_state and use stop-action, or load checkpoint file and go on from there")
-		#get current state
+		rospy.loginfo("build last_state and use stop-action, or load checkpoint file and go on from there, should only run once")
+		#get current state, that means degree, force1 and force2 in one list
 		state_from_env = get_current_state()
-		state_batch.append(state_from_env)
+		state_from_env = np.reshape(state_from_env,(NUM_STATES,1))
+		#print("state_from_env shape", state_from_env.shape)
+		#------>('state_from_env shape', (2448, 1))
 
 		#for the first time we run, we build last_state with 4-last-states
-		last_state = np.stack(tuple(state_from_env for _ in range(4)), axis=1)
-		print("a0 last_state.shape", last_state.shape)		
-		
-		action_rewards = [0.,0.,0.,0.,0.,0.,0.,0.,0.] #states[ + GAMMA * np.max(state_reward)  
-                #action_rewards = [0.0]
-		rewards_batch.append(action_rewards)
+		#i dont want to use deep-net, could i use all 4 states in one array-row ???
+		last_state = np.stack(tuple(state_from_env for _ in range(4)), axis=2)
+		#print("a0 last_state.shape", last_state.shape)		
+		#------>('a0 last_state.shape', (2448, 1, 4))		
 
-		
 		a=2
-		#rospy.loginfo("get_current_state >%s<", str(state_batch))
 	elif a==1:
 		rospy.loginfo("a1 publish random or learned action")
-		#random action is better to explore bigger state space
-
+		
+		#badly simple decreasing probability
 		probability_of_random_action -= 0.01
 
 		#build random action
 		if random.random() <= probability_of_random_action :
 			rospy.loginfo("random action")
-			current_action_state = np.zeros([NUM_ACTIONS])
+			current_action = np.zeros([NUM_ACTIONS])
 			rand = random.randrange(NUM_ACTIONS)
-			current_action_state[rand] = 1		
+			current_action[rand] = 1		
 			
 		else :
 			rospy.loginfo("learned action")
 			#or we readout learned action
-			current_action_state = session.run(output, feed_dict={state: [state_batch[-1]]})
+			#current_action = session.run(output, feed_dict={state: [state_batch[-1]]})
+			current_action = session.run(output, feed_dict={state: [last_state[-1]]})
 
 		#get the index of the max value to map this value to an original-action
-		max_idx = np.argmax(current_action_state)
+		max_idx = np.argmax(current_action)
 		rospy.loginfo("action we publish >%d<", max_idx)
 		#how do i map 32 or even more values to the appropriate action?
 		if max_idx==0:
@@ -255,8 +259,7 @@ def listener():
                         servo_pub_values.data = [s1_bwd_1, s2_bwd_1, sx0, sx0, sx0, sx0, sx0, sx0]
 
 
-		actions_batch.append(current_action_state)
-		last_action = current_action_state
+		last_action = current_action
 
 		servo_pub.publish(servo_pub_values)
 		# after publishing we publish stop servo values, so we are not continous, thats why i use this if-elif-elif construct
@@ -268,6 +271,8 @@ def listener():
 		#publish stop servo values, and let one ros-rate-cycle run, to settle the servos
 		servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		servo_pub.publish(servo_pub_values)
+		
+		#we dont store a new state and action value
 		a=3
 	
 	elif a==3:
@@ -276,10 +281,14 @@ def listener():
 		#we get our state
 		state_from_env = get_current_state()
 
-		reshaped_state_from_env = np.reshape(state_from_env, (2248,1))
-		current_state = np.append(last_state[:,1:], reshaped_state_from_env, axis=1)
-		print("a3 current_state.shape", current_state.shape)
-
+		state_from_env = np.reshape(state_from_env, (NUM_STATES, 1,1))
+		#print("state_from_env shape", state_from_env.shape)
+		#---->('state_from_env shape', (2448, 1, 1))
+		#print("last_state shape", last_state.shape)
+		#---->('last_state shape', (2448, 1, 4))
+		current_state = np.append(last_state[:,:,1:], state_from_env, axis=2)
+		#print("a3 current_state.shape", current_state.shape)
+		#---->('a3 current_state.shape', (2448, 1, 4))
 
 		#we calculate the reward, for that we use states[] from build_reward_state()
                 #the reward for reaching the degree/angle_goal
@@ -316,9 +325,19 @@ def listener():
 			print("t-cur-state[0] len", len(current_states[0]))
 			agents_expected_reward = []
 
-			print("t-prev-states", previous_states)
+			#print("t-prev-states", previous_states)
 
-			agents_reward_per_action = session.run(output, feed_dict={state: [current_states[0]]})
+			agents_reward_per_action = session.run(output, feed_dict={state: [current_states]})
+			# agents_reward_per_action = session.run(output, feed_dict={state: [current_states]})
+			#  File "/usr/local/lib/python2.7/dist-packages/tensorflow/python/client/session.py", line 340, in run
+			#    run_metadata_ptr)
+			#  File "/usr/local/lib/python2.7/dist-packages/tensorflow/python/client/session.py", line 553, in _run
+			#    % (np_val.shape, subfeed_t.name, str(subfeed_t.get_shape())))
+			#ValueError: Cannot feed value of shape (1, 5, 2448, 1, 4) for Tensor u'Placeholder:0', which has shape '(?, 2448)'
+
+
+
+
 			print("t-agents-reward-per-action", agents_reward_per_action)
 
 			for i in range(len(mini_batch)):
