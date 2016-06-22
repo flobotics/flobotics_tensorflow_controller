@@ -149,11 +149,11 @@ def listener():
     session = tf.Session()
     build_reward_state()
 
-    state = tf.placeholder("float", [None, NUM_STATES])
+    state = tf.placeholder("float", [None, NUM_STATES*4])
     targets = tf.placeholder("float", [None, NUM_ACTIONS])
 
     #hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
-    hidden_weights = tf.Variable(tf.truncated_normal([NUM_STATES, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1), name="hidden_weights")
+    hidden_weights = tf.Variable(tf.truncated_normal([NUM_STATES*4, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1), name="hidden_weights")
     h_w_hist = tf.histogram_summary("hidden_weights", hidden_weights)
 
     #bias
@@ -209,11 +209,10 @@ def listener():
 		#------>('state_from_env shape', (2448, 1))
 
 		#for the first time we run, we build last_state with 4-last-states
-		#i dont want to use deep-net, could i use all 4 states in one array-row ???
 		last_state = np.stack(tuple(state_from_env for _ in range(4)), axis=2)
 		#print("a0 last_state.shape", last_state.shape)		
 		#------>('a0 last_state.shape', (2448, 1, 4))		
-
+		
 		a=2
 	elif a==1:
 		rospy.loginfo("a1 publish random or learned action")
@@ -281,22 +280,25 @@ def listener():
 		#we get our state
 		state_from_env = get_current_state()
 
-		state_from_env = np.reshape(state_from_env, (NUM_STATES, 1,1))
+		state_from_env1 = np.reshape(state_from_env, (NUM_STATES, 1,1))
 		#print("state_from_env shape", state_from_env.shape)
 		#---->('state_from_env shape', (2448, 1, 1))
 		#print("last_state shape", last_state.shape)
 		#---->('last_state shape', (2448, 1, 4))
-		current_state = np.append(last_state[:,:,1:], state_from_env, axis=2)
+		current_state = np.append(last_state[:,:,1:], state_from_env1, axis=2)
 		#print("a3 current_state.shape", current_state.shape)
 		#---->('a3 current_state.shape', (2448, 1, 4))
 
+		test_s = np.reshape(current_state, (NUM_STATES*4, 1))
+		print("test_s shape", test_s.shape)
+
 		#we calculate the reward, for that we use states[] from build_reward_state()
                 #the reward for reaching the degree/angle_goal
-                r1 = state_from_env[current_degree] + states[current_degree]
+                r1 = state_from_env[angle_possible_max-1 + current_degree] + states[angle_possible_max-1 + current_degree]
                 #the reward for holding a specified force on wire-1
-                r2 = state_from_env[angle_possible_max-1 + current_force_1] + states[angle_possible_max-1 + current_force_1]
+                r2 = state_from_env[angle_possible_max-1 + angle_possible_max + current_force_1] + states[angle_possible_max-1 + angle_possible_max + current_force_1]
                 #the reward for holding a specified force on wire-2
-                r3 = state_from_env[angle_possible_max-1 + force_max_value + current_force_2] + states[angle_possible_max-1 + force_max_value + current_force_2]
+                r3 = state_from_env[angle_possible_max-1 + angle_possible_max + force_max_value + current_force_2] + states[angle_possible_max-1 + angle_possible_max + force_max_value + current_force_2]
                 #add them
                 reward = r1 + r2 + r3
 
@@ -323,17 +325,20 @@ def listener():
 			print("t-cur-state len", len(current_states))
 			print("t-cur-state type", type(current_states))
 			print("t-cur-state[0] len", len(current_states[0]))
-			agents_expected_reward = []
+			test_c = np.reshape(current_states, (5, NUM_STATES*4, 1))
+			print("t-test_c shape", test_c.shape)
 
+			agents_expected_reward = []
+			
 			#print("t-prev-states", previous_states)
 
-			agents_reward_per_action = session.run(output, feed_dict={state: [current_states]})
-			# agents_reward_per_action = session.run(output, feed_dict={state: [current_states]})
+			agents_reward_per_action = session.run(output, feed_dict={state: [test_c[0]]})
+			#    agents_reward_per_action = session.run(output, feed_dict={state: [test_c[0]]})
 			#  File "/usr/local/lib/python2.7/dist-packages/tensorflow/python/client/session.py", line 340, in run
 			#    run_metadata_ptr)
 			#  File "/usr/local/lib/python2.7/dist-packages/tensorflow/python/client/session.py", line 553, in _run
 			#    % (np_val.shape, subfeed_t.name, str(subfeed_t.get_shape())))
-			#ValueError: Cannot feed value of shape (1, 5, 2448, 1, 4) for Tensor u'Placeholder:0', which has shape '(?, 2448)'
+			#ValueError: Cannot feed value of shape (1, 9792, 1) for Tensor u'Placeholder:0', which has shape '(?, 9792)'
 
 
 
