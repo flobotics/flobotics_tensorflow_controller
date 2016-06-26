@@ -15,7 +15,10 @@ from collections import deque
 
 NUM_STATES = 200+200+1024+1024  #200 degree angle_goal, 200 possible degrees the joint could move, 1024 force values, two times
 NUM_ACTIONS = 9  #3^2=9      ,one stop-state, one different speed left, one diff.speed right, two servos
+STATE_FRAMES = 4
 GAMMA = 0.5
+RESIZED_DATA_X = 12
+RESIZED_DATA_Y = 204   #12*204 = 2448 = NUM_STATES
 
 force_reward_max = 15  #where should the max/middle point be, we get force values from 0.0 - 1023.0 (float),
 force_reward_length = 10  #how long/big the area around max
@@ -122,7 +125,6 @@ def get_current_state():
 	d.extend(a)
 	d.extend(b)
 	d.extend(c)
-	print "length curr-state d >%d<" %len(d)
 	return d
 
 # callback which delivers us periodically the adc values of the force sensors
@@ -149,25 +151,28 @@ def listener():
     session = tf.Session()
     build_reward_state()
 
-    state = tf.placeholder("float", [None, NUM_STATES*4])
-    targets = tf.placeholder("float", [None, NUM_ACTIONS])
+    state = tf.placeholder("float", [None, NUM_STATES*STATE_FRAMES])
+    action = tf.placeholder("float", [None, NUM_ACTIONS])
+    target = tf.placeholder("float", [None])
 
     #hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
-    hidden_weights = tf.Variable(tf.truncated_normal([NUM_STATES*4, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1), name="hidden_weights")
-    h_w_hist = tf.histogram_summary("hidden_weights", hidden_weights)
+    Weights = tf.Variable(tf.truncated_normal([NUM_STATES*STATE_FRAMES, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1), name="Weights")
+    h_w_hist = tf.histogram_summary("Weights", Weights)
 
     #bias
     biases = tf.Variable(tf.zeros([NUM_ACTIONS]), name="biases")
     b_hist = tf.histogram_summary("biases", biases) 
 
-    output = tf.matmul(state, hidden_weights)
+    #we feed in our state and fetch (1,9) array with values. Highest value is the action the NN would do
+    output = tf.matmul(state, Weights) + biases
     o_hist = tf.histogram_summary("output", output)
 
-    readout_action = tf.reduce_sum(tf.mul(output, targets), reduction_indices=1)
-	
+    #we feed in the action the NN would do and targets=rewards ???
+    readout_action = tf.reduce_sum(tf.mul(output, action), reduction_indices=1)
+
     with tf.name_scope("loss_summary"):
-    	#loss = tf.reduce_mean(tf.square(output - targets))
-	loss = tf.reduce_mean(tf.square(targets - readout_action))
+    	#loss = tf.reduce_mean(tf.square(output - target))
+	loss = tf.reduce_mean(tf.square(target - readout_action))
     	tf.scalar_summary("loss", loss)
 
     merged = tf.merge_all_summaries()
@@ -206,13 +211,9 @@ def listener():
 		#get current state, that means degree, force1 and force2 in one list
 		state_from_env = get_current_state()
 		state_from_env = np.reshape(state_from_env,(NUM_STATES,1))
-		#print("state_from_env shape", state_from_env.shape)
-		#------>('state_from_env shape', (2448, 1))
 
 		#for the first time we run, we build last_state with 4-last-states
 		last_state = np.stack(tuple(state_from_env for _ in range(4)), axis=2)
-		#print("a0 last_state.shape", last_state.shape)		
-		#------>('a0 last_state.shape', (2448, 1, 4))		
 		
 		a=2
 	elif a==1:
@@ -221,10 +222,12 @@ def listener():
 		#badly simple decreasing probability
 		probability_of_random_action -= 0.01
 
+		current_action = np.zeros([NUM_ACTIONS])
+
 		#build random action
-		if random.random() >= probability_of_random_action :
+		if random.random() <= probability_of_random_action :
 			rospy.loginfo("random action")
-			current_action = np.zeros([NUM_ACTIONS])
+			#current_action = np.zeros([NUM_ACTIONS])
 			rand = random.randrange(NUM_ACTIONS)
 			current_action[rand] = 1		
 			
@@ -232,7 +235,9 @@ def listener():
 			rospy.loginfo("learned action")
 			#or we readout learned action
 			last_state_array = np.reshape(last_state, (NUM_STATES*4))
-			current_action = session.run(output, feed_dict={state: [last_state_array]})
+			current_action1 = session.run(output, feed_dict={state: [last_state_array]})
+			#current_action1 is not a array ?? build it new
+			current_action[np.argmax(current_action1)] = 1
 
 		#get the index of the max value to map this value to an original-action
 		max_idx = np.argmax(current_action)
@@ -282,14 +287,7 @@ def listener():
 		state_from_env = get_current_state()
 
 		state_from_env1 = np.reshape(state_from_env, (NUM_STATES, 1,1))
-		#print("state_from_env shape", state_from_env.shape)
-		#---->('state_from_env shape', (2448, 1, 1))
-		#print("last_state shape", last_state.shape)
-		#---->('last_state shape', (2448, 1, 4))
 		current_state = np.append(last_state[:,:,1:], state_from_env1, axis=2)
-		#print("a3 current_state.shape", current_state.shape)
-		#---->('a3 current_state.shape', (2448, 1, 4))
-
 
 		#we calculate the reward, for that we use states[] from build_reward_state()
                 #the reward for reaching the degree/angle_goal
@@ -301,7 +299,7 @@ def listener():
                 #add them
                 reward = r1 + r2 + r3
 
-		print("reward", reward)
+		rospy.loginfo("reward %f", reward)
 
 
 		#we append it to our observations
@@ -311,43 +309,28 @@ def listener():
 		
 		if len(observations) > OBSERVATION_STEPS:
 			#train
-			print("train")
+			rospy.loginfo("train network-----------------------------------------")
 
 			mini_batch = random.sample(observations, MINI_BATCH_SIZE)
         		previous_states = [d[0] for d in mini_batch]
-			print("t-prev-states len", len(previous_states))
         		actions = [d[1] for d in mini_batch]
-			print("t-actions", actions)
 			rewards = [d[2] for d in mini_batch]
-			print("t-rewards", rewards)
 			current_states = [d[3] for d in mini_batch]
-			print("t-cur-state len", len(current_states))
-			print("t-cur-state type", type(current_states))
-			print("t-cur-state[0] len", len(current_states[0]))
-			current_states = np.reshape(current_states, (5, NUM_STATES*4))
-			print("t-current_states shape", current_states.shape)
-			previous_states = np.reshape(previous_states, (5, NUM_STATES*4))
-			print("t-previous_states shape", previous_states.shape)
-		
-
+			current_states = np.reshape(current_states, (MINI_BATCH_SIZE, NUM_STATES*4))
+			previous_states = np.reshape(previous_states, (MINI_BATCH_SIZE, NUM_STATES*4))
 
 			agents_expected_reward = []
 			
-			#print("t-prev-states", previous_states)
 			agents_reward_per_action = session.run(output, feed_dict={state: current_states})
-
-
-			print("t-agents-reward-per-action", agents_reward_per_action)
 
 			for i in range(len(mini_batch)):
 				agents_expected_reward.append(rewards[i] + FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
 
+			agents_expected_reward = np.reshape(agents_expected_reward, (MINI_BATCH_SIZE))
+			
+	
+        		_, result = session.run([train_operation, merged], feed_dict={state: previous_states, action : actions, target: agents_expected_reward})
 
-
-			##wrong??
-
-			print("at-agents_expected_reward", agents_expected_reward)
-        		_, result = session.run([train_operation, merged], feed_dict={state: previous_states, targets: actions, output: agents_expected_reward})
 
 			sum_writer.add_summary(result, sum_writer_index)
 			sum_writer_index += 1
