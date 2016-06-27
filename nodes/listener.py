@@ -23,7 +23,7 @@ RESIZED_DATA_Y = 204   #12*204 = 2448 = NUM_STATES
 force_reward_max = 15  #where should the max/middle point be, we get force values from 0.0 - 1023.0 (float),
 force_reward_length = 10  #how long/big the area around max
 force_max_value = 1024     #how much force values possible
-angle_goal = 5		#to which angle should it go, get reward
+angle_goal = 105		#to which angle should it go, get reward  #100 is the middle position
 angle_possible_max = 200  #how many degrees the angle can go max
 current_degree = 0     #will be filled periodically from  callback-function
 current_force_1 = 0    #will be filled periodically from  callback-function
@@ -40,9 +40,9 @@ s1_stop = 377
 s1_fwd_1 = 380
 s1_bwd_1 = 374
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
-s2_stop = 399
+s2_stop = 400
 s2_fwd_1 = 402
-s2_bwd_1 = 396
+s2_bwd_1 = 398
 sx0 = 1050  #do nothing value for not-used servos
 
 observations = deque()
@@ -80,19 +80,22 @@ def build_reward_state():
 
 	f_list2 = [(x==1050) for x in range((1024 - (len(f_list1) + len(f_list_pos) + len(f_list_neg) ) ))]
 	print "length f_list2 >%d<" %len(f_list2)
-
-
+	
 	#c = []
 	f1.extend(f_list1)
 	f1.extend(f_list_pos)
 	f1.extend(f_list_neg)
 	f1.extend(f_list2)
+	f1[0] = -1
+	f1[1023] = -1
 	#print(f1)
 	#copy the same into f2
         f2.extend(f_list1)
         f2.extend(f_list_pos)
         f2.extend(f_list_neg)
         f2.extend(f_list2)
+	f2[0] = -1
+	f2[1023] = -1
         #print(f2)
 
 	angle = [(x==angle_goal) for x in range(angle_possible_max)]
@@ -116,6 +119,10 @@ def build_reward_state():
 
 
 def get_current_state():
+	global current_degree
+	global current_force_1
+	global current_force_2
+	global angle_goal
 	a1 = [(x==angle_goal) for x in range(angle_possible_max)]
 	a = [(x==current_degree) for x in range(angle_possible_max)]
 	b = [(x==current_force_1) for x in range(force_max_value)]
@@ -133,14 +140,17 @@ def adc_callback(data):
     #rospy.loginfo(rospy.get_caller_id() + "adc heard %s", data.data)
     #rospy.loginfo("adc-val0: %f", (1023/5.0)*data.data[0])
     #rospy.loginfo("adc-val1: %f", (1023/5.0)*data.data[1])
-    current_force_1 = (1023/5.0)*data.data[0]
-    current_force_2 = (1023/5.0)*data.data[1]
+    global current_force_1
+    global current_force_2
+    current_force_1 = int((1023/5.0)*data.data[0])
+    current_force_2 = int((1023/5.0)*data.data[1])
     
 #callback which delivers us periodically the degree, from 0.0-200.0 degree (float)
 def degree_callback(data):
     #rospy.loginfo(rospy.get_caller_id() + "degree heard %f", data.data)
-    current_degree = data.data
-
+    #minus 100, because 0 degree is the middle position
+    global current_degree
+    current_degree = int(data.data + 100)
 
 #the main thread/program
 #it runs in a loop, todo something and learn to reach the angle_goal (in degree)
@@ -291,7 +301,12 @@ def listener():
 
 		#we calculate the reward, for that we use states[] from build_reward_state()
                 #the reward for reaching the degree/angle_goal
-                r1 = state_from_env[angle_possible_max-1 + current_degree] + states[angle_possible_max-1 + current_degree]
+		global current_degree
+		global current_force_1
+		global current_force_2
+                rospy.loginfo("current_degree %d",  current_degree)
+		rospy.loginfo("current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
+		r1 = state_from_env[angle_possible_max-1 + current_degree] + states[angle_possible_max-1 + current_degree]
                 #the reward for holding a specified force on wire-1
                 r2 = state_from_env[angle_possible_max-1 + angle_possible_max + current_force_1] + states[angle_possible_max-1 + angle_possible_max + current_force_1]
                 #the reward for holding a specified force on wire-2
