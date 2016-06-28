@@ -38,12 +38,12 @@ states = []
 
 #variables for bad-mapping approach, s1=servo1 , s2=servo2,.... 
 s1_stop = 377
-s1_fwd_1 = 380
-s1_bwd_1 = 374
+s1_fwd_1 = 379
+s1_bwd_1 = 375
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
 s2_stop = 400
-s2_fwd_1 = 404
-s2_bwd_1 = 396
+s2_fwd_1 = 406
+s2_bwd_1 = 394
 sx0 = 1050  #do nothing value for not-used servos
 
 observations = deque()
@@ -219,7 +219,9 @@ def listener():
     saver = tf.train.Saver()
 
     if os.path.isfile("/home/ros/tensorflow-models/model.ckpt"):
-	    saver.restore(session, "/home/ros/tensorflow-models/model.ckpt")
+	saver.restore(session, "/home/ros/tensorflow-models/model.ckpt")
+	rospy.loginfo("model restored")
+	
 
     #connect callbacks, so that we periodically get our values, degree and force
     rospy.Subscriber("adc_pi_plus_pub", Float32MultiArray, adc_callback)
@@ -243,6 +245,7 @@ def listener():
     FUTURE_REWARD_DISCOUNT = 0.9
 
     STEPPER = 0	
+    punish = 0
     global current_degree
     global current_force_1
     global current_force_2
@@ -260,7 +263,7 @@ def listener():
 		
 		a=2
 	elif a==1:
-		rospy.loginfo("a1 publish random or learned action")
+		#rospy.loginfo("a1 publish random or learned action")
 		
 		#badly simple decreasing probability
 		global probability_of_random_action
@@ -291,24 +294,55 @@ def listener():
 		max_idx = np.argmax(current_action)
 		rospy.loginfo("action we publish >%d<", max_idx)
 		#how do i map 32 or even more values to the appropriate action?
-		#global current_force_1
-		#global current_force_2
-		rospy.loginfo("blocker: current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
+		
+		#rospy.loginfo("blocker: current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
 		if current_force_1 == 0:
 			if current_force_2==0:
 				if max_idx==2 or max_idx==5 or max_idx==6 or max_idx==7 or max_idx==8:
 					max_idx=0
+					punish = 1
 			else:
-				if max_idx==2 or max_idx==5 or max_idx==8:
+				if max_idx==2 or max_idx==8:
 					max_idx=0
+					punish = 1
 		elif current_force_2==0:
 			if max_idx==6 or max_idx==7 or max_idx==8:
 				max_idx=0
+				punish = 1
 
+		if current_force_1 > 35:
+			if current_force_2 > 35:
+				if max_idx==1 or max_idx==3 or max_idx==4 or max_idx==5 or max_idx==7:
+					max_idx=0
+					punish = 1
+			else:
+				if max_idx==1 or max_idx==3 or max_idx==4 or max_idx==7:
+					max_idx=0
+					punish = 1
+
+		if current_force_2 > 35:
+			if max_idx==1 or max_idx==3 or max_idx==4:
+				max_idx=0
+				punish = 1
+
+
+		if current_degree < 30:
+			if max_idx==1 or max_idx==4 or max_idx==7:
+				max_idx=5
+				punish = 1
+				#current_action = np.zeros([NUM_ACTIONS])
+				#current_action[5] = 1
+		elif current_degree > 170:
+			if max_idx==3 or max_idx==4 or max_idx==5:
+				max_idx=7
+				punish = 1
+				#current_action = np.zeros([NUM_ACTIONS])
+				#current_action[7] = 1
+		
 	
 		if max_idx==0:
-			current_action = np.zeros([NUM_ACTIONS])
-			current_action[0] = 1
+			#current_action = np.zeros([NUM_ACTIONS])
+			#current_action[0] = 1
 			#2 servos stop
 			servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==1:
@@ -355,12 +389,9 @@ def listener():
 
 		#we calculate the reward, for that we use states[] from build_reward_state()
                 #the reward for reaching the degree/angle_goal
-		#global current_degree
-		#global current_force_1
-		#global current_force_2
-                rospy.loginfo("current_degree %d",  current_degree)
-		rospy.loginfo("current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
-		print("states len", len(states))
+                #rospy.loginfo("current_degree %d",  current_degree)
+		#rospy.loginfo("current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
+		#print("states len", len(states))
 
 
 		r1 = state_from_env[angle_possible_max-1 + current_degree] + states[current_degree]
@@ -370,6 +401,10 @@ def listener():
                 r3 = state_from_env[angle_possible_max-1 + angle_possible_max + force_max_value + current_force_2] + states[angle_possible_max-1 + force_max_value + current_force_2]
                 #add them
                 reward = r1 + r2 + r3
+
+		if punish==1:
+			punish=0
+			reward = 0
 
 		rospy.loginfo("reward %f", reward)
 
@@ -419,6 +454,7 @@ def listener():
 
     save_path = saver.save(session, "/home/ros/tensorflow-models/model.ckpt")
     rospy.loginfo("model saved---------")
+    session.close()
 
     # spin() simply keeps python from exiting until this node is stopped
     #rospy.spin()
