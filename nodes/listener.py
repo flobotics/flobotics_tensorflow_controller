@@ -51,7 +51,7 @@ sx0 = 1050  #do nothing value for not-used servos
 observations = deque()
 
 
-MINI_BATCH_SIZE = 5 
+MINI_BATCH_SIZE = 20 
 probability_of_random_action = 1
 
 
@@ -242,7 +242,7 @@ def listener():
     last_state = None
     sum_writer_index = 0
     MEMORY_SIZE = 10000
-    OBSERVATION_STEPS = 5 
+    OBSERVATION_STEPS = 50 
     FUTURE_REWARD_DISCOUNT = 0.9
 
     STEPPER = 0	
@@ -291,7 +291,7 @@ def listener():
 
 		#get the index of the max value to map this value to an original-action
 		max_idx = np.argmax(current_action)
-		rospy.loginfo("action we publish >%d<", max_idx)
+		#rospy.loginfo("action we publish >%d<", max_idx)
 		#how do i map 32 or even more values to the appropriate action?
 		
 		#rospy.loginfo("blocker: current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
@@ -328,13 +328,17 @@ def listener():
 		if current_degree < 30:
 			if max_idx==1 or max_idx==4 or max_idx==7:
 				max_idx=5
+				current_action = np.zeros([NUM_ACTIONS])
+				current_action[5] = 1
 				punish = 1
 		elif current_degree > 170:
 			if max_idx==3 or max_idx==4 or max_idx==5:
 				max_idx=7
+				current_action = np.zeros([NUM_ACTIONS])
+				current_action[7] = 1
 				punish = 1
 		
-	
+		rospy.loginfo("action we publish >%d<", max_idx)
 		if max_idx==0:
 			#2 servos stop
 			servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
