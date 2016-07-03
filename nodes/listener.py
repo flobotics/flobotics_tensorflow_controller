@@ -16,7 +16,7 @@ import os.path
 
 NUM_STATES = 264+264+1024+1024+1024+1024  #264 degree angle_goal, 264 possible degrees the joint could move, 1024 force values, two times
 NUM_ACTIONS = 9  #3^2=9      ,one stop-state, one different speed left, one diff.speed right, two servos
-STATE_FRAMES = 1
+STATE_FRAMES = 4
 GAMMA = 0.5
 RESIZED_DATA_X = 68
 RESIZED_DATA_Y = 68   # = NUM_STATES
@@ -43,7 +43,7 @@ s1_stop = 377
 s1_fwd_1 = 380
 s1_bwd_1 = 373
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
-s2_stop = 400
+s2_stop = 399
 s2_fwd_1 = 406
 s2_bwd_1 = 394
 sx0 = 1050  #do nothing value for not-used servos
@@ -51,7 +51,7 @@ sx0 = 1050  #do nothing value for not-used servos
 observations = deque()
 
 
-MINI_BATCH_SIZE = 10 
+MINI_BATCH_SIZE = 5 
 probability_of_random_action = 1
 
 
@@ -61,10 +61,13 @@ probability_of_random_action = 1
 #
 #
 #
-# angle_goal   degree      force1      force2
-#    |               |
-#    |               |         /\         /\
-# ---|---------------|--------/  \-------/  \---------
+#    degree      force1      force2
+#           |
+#           |         /\         /\
+# ----------|--------/  \-------/  \---------
+#
+#   degree_goal    force_1_goal   force_2_goal
+#    
 # 68x68 = 4624 => 264_degree *2 + 4*1024
 
 def get_current_state():
@@ -79,11 +82,11 @@ def get_current_state():
 	b1 = np.linspace(0, 20, num=degree_goal)
 	b2 = np.linspace(19.9, 0, num=degree_possible_max-degree_goal)
 
-	b3 = np.linspace(0, 1, num=force_reward_max)
-	b4 = np.linspace(0.99, 0, num=force_max_value-force_reward_max)
+	b3 = np.linspace(0, 1, num=force_1_goal)
+	b4 = np.linspace(0.99, 0, num=force_max_value-force_1_goal)
 
-	b5 = np.linspace(0, 1, num=force_reward_max)
-	b6 = np.linspace(0.99, 0, num=force_max_value-force_reward_max)
+	b5 = np.linspace(0, 1, num=force_2_goal)
+	b6 = np.linspace(0.99, 0, num=force_max_value-force_2_goal)
 
 	d = []
 	d.extend(a1)
@@ -95,21 +98,15 @@ def get_current_state():
 	d.extend(b4)
 	d.extend(b5)
 	d.extend(b6)
-	rospy.loginfo("get_current_state: len_4624 state >%d<", len(d))
+	#rospy.loginfo("get_current_state: len_4624 state >%d<", len(d))
 	return d
 
 def get_reward(state):
 	s = np.asarray(state)
 	s = s.reshape(2, 2312)
-	print("get_reward: s.shape", s.shape)
 
 	s1 = s[0] * s[1]
-	print("get_reward: s1 shape", s1.shape)
-	print("get_reward: s1", s1)
-	print("get_reward: s0", s[0])
-
 	s2 = sum(s1)
-	print("get_reward: s2 sum", s2)
 
 	return s2
 
@@ -137,11 +134,11 @@ def probability_callback(data):
     global probability_of_random_action
     probability_of_random_action = data.data
 
-def weight_variable(shape):
+def weight_variable(shape, name):
     initial = tf.truncated_normal(shape, stddev=0.01)
     return tf.Variable(initial)
 
-def bias_variable(shape):
+def bias_variable(shape, name):
     initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
@@ -158,65 +155,53 @@ def listener():
     rospy.init_node('listener', anonymous=True)
 
     session = tf.Session()
-    #build_reward_state()
 
-    state = tf.placeholder("float", [None, NUM_STATES*STATE_FRAMES])
+    state = tf.placeholder("float", [None, NUM_STATES])
     action = tf.placeholder("float", [None, NUM_ACTIONS])
     target = tf.placeholder("float", [None])
 
-    #hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
-    Weights = tf.Variable(tf.truncated_normal([NUM_STATES*STATE_FRAMES, NUM_ACTIONS], mean=0.1, stddev=0.02, dtype=tf.float32, seed=1), name="Weights")
-    h_w_hist = tf.histogram_summary("Weights", Weights)
+    conv_weights_1 = weight_variable([8,8,4,32], "conv1_weights")
+    conv_biases_1 = bias_variable([32], "conv1_biases")
 
-    #bias
-    biases = tf.Variable(tf.zeros([NUM_ACTIONS]), name="biases")
-    b_hist = tf.histogram_summary("biases", biases) 
+    conv_weights_2 = weight_variable([4,4,32,64], "conv2_weights")
+    conv_biases_2 = bias_variable([64], "conv2_biases")
 
-    conv_weights_1 = weight_variable([5,5,1,32])
-    conv_biases_1 = bias_variable([32])
+    conv_weights_3 = weight_variable([3,3,64,64], "conv3_weights")
+    conv_biases_3 = bias_variable([64], "conv3_biases")
 
-    #
-    fc1_weights = weight_variable([25*25*32, 2450])
-    fc1_biases = bias_variable([2450])
-    fc1_b_hist = tf.histogram_summary("fc1_biases", fc1_biases)
-    fc1_w_hist = tf.histogram_summary("fc1_weights", fc1_weights)
+    with tf.name_scope("fc_1") as fc_1:
+    	fc1_weights = weight_variable([2*2*64, 4624], "fc1_weights")
+    	fc1_biases = bias_variable([4624], "fc1_biases")
+        fc1_b_hist = tf.histogram_summary("fc_1/biases", fc1_biases)
+        fc1_w_hist = tf.histogram_summary("fc_1/weights", fc1_weights)
 
-    fc2_weights = weight_variable([2450, 9])
-    fc2_biases = bias_variable([9])
-    fc2_w_hist = tf.histogram_summary("fc2_weights", fc2_weights)
-    fc2_b_hist = tf.histogram_summary("fc2_biases", fc2_biases)
+    with tf.name_scope("fc_2") as fc_2:
+    	fc2_weights = weight_variable([4624, NUM_ACTIONS], "fc2_weights")
+    	fc2_biases = bias_variable([NUM_ACTIONS], "fc2_biases")
+	fc2_w_hist = tf.histogram_summary("fc_2/weights", fc2_weights)
+    	fc2_b_hist = tf.histogram_summary("fc_2/biases", fc2_biases)
 
-    #reshape state from 1,2450  to 50,49
-    conv_state_1 = tf.reshape(state, [-1, 50, 49, 1])
+    input_layer = tf.placeholder("float", [None, RESIZED_DATA_X, RESIZED_DATA_Y, STATE_FRAMES])
 
-    h_conv1 = tf.nn.relu(conv2d(conv_state_1, conv_weights_1) + conv_biases_1)
+    h_conv1 = tf.nn.relu(tf.nn.conv2d(input_layer, conv_weights_1, strides=[1, 4, 4, 1], padding="SAME") + conv_biases_1)
     h_pool1 = max_pool_2x2(h_conv1)
 
-    h_pool1_flat = tf.reshape(h_pool1, [-1, 25*25*32])
-    final_hidden_activation = tf.nn.relu(tf.matmul(h_pool1_flat, fc1_weights, name='final_hidden_activation') + fc1_biases)
+    h_conv2 = tf.nn.relu(tf.nn.conv2d(h_pool1, conv_weights_2, strides=[1, 2, 2, 1], padding="SAME") + conv_biases_2)
+    h_pool2 = max_pool_2x2(h_conv2)
+
+    h_conv3 = tf.nn.relu(tf.nn.conv2d(h_pool2, conv_weights_3, strides=[1,1,1,1], padding="SAME") + conv_biases_3)
+    h_pool3 = max_pool_2x2(h_conv3)
+
+    h_pool3_flat = tf.reshape(h_pool3, [-1,2*2*64])
+    final_hidden_activation = tf.nn.relu(tf.matmul(h_pool3_flat, fc1_weights, name='final_hidden_activation') + fc1_biases)
 
     output_layer = tf.matmul(final_hidden_activation, fc2_weights) + fc2_biases
     ol_hist = tf.histogram_summary("output_layer", output_layer)
 
-    #we feed in our state and fetch (1,9) array with values. Highest value is the action the NN would do
-    #output = tf.matmul(state, Weights) + biases
-    #o_hist = tf.histogram_summary("output", output)
-
-    #output1 = tf.nn.relu(output)
-    #output1 = tf.nn.softmax(output)
-    #o1_hist = tf.histogram_summary("output1", output1)
- 
  
     #we feed in the action the NN would do and targets=rewards ???
     readout_action = tf.reduce_sum(tf.mul(output_layer, action), reduction_indices=1)
     r_hist = tf.histogram_summary("readout_action", readout_action)
-
-    #r2 = tf.nn.softmax(readout_action)
-
-    #relu_action = tf.nn.relu(readout_action)
-    #relu_hist = tf.histogram_summary("relu_action", relu_action)
-    #sig_action = tf.nn.sigmoid(readout_action)
-    #sig_hist = tf.histogram_summary("sig_action", sig_action)
 
     with tf.name_scope("loss_summary"):
     	#loss = tf.reduce_mean(tf.square(output - target))
@@ -254,9 +239,10 @@ def listener():
 
     last_action = np.zeros([NUM_ACTIONS])
     last_action[0] = 1   #stop action
+    last_state = None
     sum_writer_index = 0
     MEMORY_SIZE = 10000
-    OBSERVATION_STEPS = 20 
+    OBSERVATION_STEPS = 5 
     FUTURE_REWARD_DISCOUNT = 0.9
 
     STEPPER = 0	
@@ -269,13 +255,11 @@ def listener():
 
 	if a==0:
 		rospy.loginfo("build last_state and use stop-action, or load checkpoint file and go on from there, should only run once")
-		#get current state, that means degree, force1 and force2 in one list
 		state_from_env = get_current_state()
-		state_from_env = np.reshape(state_from_env,(NUM_STATES,1))
+		state_from_env = np.reshape(state_from_env, (RESIZED_DATA_X, RESIZED_DATA_Y))
 
 		#for the first time we run, we build last_state with 4-last-states
 		last_state = np.stack(tuple(state_from_env for _ in range(STATE_FRAMES)), axis=2)
-		
 		a=2
 	elif a==1:
 		#rospy.loginfo("a1 publish random or learned action")
@@ -299,8 +283,7 @@ def listener():
 		else :
 			rospy.loginfo("learned action")
 			#or we readout learned action
-			last_state_array = np.reshape(last_state, (NUM_STATES*STATE_FRAMES))
-			current_action1 = session.run(output_layer, feed_dict={state: [last_state_array]})
+			current_action1 = session.run(output_layer, feed_dict={input_layer: [last_state]})
 			current_action = np.zeros([NUM_ACTIONS])
 			#current_action1 is not a array ?? build it new
 			current_action[np.argmax(current_action1)] = 1
@@ -346,19 +329,13 @@ def listener():
 			if max_idx==1 or max_idx==4 or max_idx==7:
 				max_idx=5
 				punish = 1
-				#current_action = np.zeros([NUM_ACTIONS])
-				#current_action[5] = 1
 		elif current_degree > 170:
 			if max_idx==3 or max_idx==4 or max_idx==5:
 				max_idx=7
 				punish = 1
-				#current_action = np.zeros([NUM_ACTIONS])
-				#current_action[7] = 1
 		
 	
 		if max_idx==0:
-			#current_action = np.zeros([NUM_ACTIONS])
-			#current_action[0] = 1
 			#2 servos stop
 			servo_pub_values.data = [s1_stop,s2_stop, sx0, sx0, sx0, sx0, sx0, sx0]
 		elif max_idx==1:
@@ -401,9 +378,8 @@ def listener():
 		state_from_env = get_current_state()
 		reward = get_reward(state_from_env)
 
-		state_from_env1 = np.reshape(state_from_env, (NUM_STATES, 1,1))
+		state_from_env1 = np.reshape(state_from_env, (RESIZED_DATA_X, RESIZED_DATA_Y,1))
 		current_state = np.append(last_state[:,:,1:], state_from_env1, axis=2)
-
 
 		if punish==1:
 			punish=0
@@ -426,24 +402,18 @@ def listener():
         		actions = [d[1] for d in mini_batch]
 			rewards = [d[2] for d in mini_batch]
 			current_states = [d[3] for d in mini_batch]
-			current_states = np.reshape(current_states, (MINI_BATCH_SIZE, NUM_STATES*STATE_FRAMES))
-			previous_states = np.reshape(previous_states, (MINI_BATCH_SIZE, NUM_STATES*STATE_FRAMES))
+			previous_states = np.reshape(previous_states, (MINI_BATCH_SIZE, RESIZED_DATA_X, RESIZED_DATA_Y, STATE_FRAMES))
 
 			agents_expected_reward = []
 			
-			agents_reward_per_action = session.run(output_layer, feed_dict={state: current_states})
-			print("tt-rewards", rewards)
-			print("tt-agents_reward_per_action", agents_reward_per_action)
+			agents_reward_per_action = session.run(output_layer, feed_dict={input_layer: current_states})
 			for i in range(len(mini_batch)):
 				agents_expected_reward.append(rewards[i] + FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
 
 			agents_expected_reward = np.reshape(agents_expected_reward, (MINI_BATCH_SIZE))
 			
 			actions = np.asarray(actions)	
-			print("tt-actions", actions)
-			print("tt-target", agents_expected_reward)
-			print("tt-pre-stat", previous_states)
-        		_, result = session.run([train_operation, merged], feed_dict={state: previous_states, action : actions, target: agents_expected_reward})
+        		_, result = session.run([train_operation, merged], feed_dict={input_layer: previous_states, action : actions, target: agents_expected_reward})
 
 
 			sum_writer.add_summary(result, sum_writer_index)
