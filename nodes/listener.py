@@ -14,9 +14,9 @@ import os.path
 ########
 
 
-NUM_STATES = 200+200+1024+1024  #200 degree angle_goal, 200 possible degrees the joint could move, 1024 force values, two times
+NUM_STATES = 201+201+1024+1024  #200 degree angle_goal, 200 possible degrees the joint could move, 1024 force values, two times
 NUM_ACTIONS = 9  #3^2=9      ,one stop-state, one different speed left, one diff.speed right, two servos
-STATE_FRAMES = 4
+STATE_FRAMES = 1
 GAMMA = 0.5
 RESIZED_DATA_X = 12
 RESIZED_DATA_Y = 204   #12*204 = 2448 = NUM_STATES
@@ -25,7 +25,7 @@ force_reward_max = 15  #where should the max/middle point be, we get force value
 force_reward_length = 10  #how long/big the area around max
 force_max_value = 1024     #how much force values possible
 angle_goal = 105		#to which angle should it go, get reward  #100 is the middle position
-angle_possible_max = 200  #how many degrees the angle can go max
+angle_possible_max = 201  #how many degrees the angle can go max
 current_degree = 0     #will be filled periodically from  callback-function
 current_force_1 = 0    #will be filled periodically from  callback-function
 current_force_2 = 0    #will be filled periodically from  callback-function
@@ -38,8 +38,8 @@ states = []
 
 #variables for bad-mapping approach, s1=servo1 , s2=servo2,.... 
 s1_stop = 377
-s1_fwd_1 = 379
-s1_bwd_1 = 375
+s1_fwd_1 = 380
+s1_bwd_1 = 373
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
 s2_stop = 400
 s2_fwd_1 = 406
@@ -52,7 +52,7 @@ observations = deque()
 #actions_batch = []
 
 
-MINI_BATCH_SIZE = 5 
+MINI_BATCH_SIZE = 10 
 probability_of_random_action = 1
 
 #   degree      force1      force2
@@ -68,20 +68,20 @@ probability_of_random_action = 1
 
 
 def build_reward_state():
-	f_list1_length = force_reward_max - (force_reward_length/2)
-	f_list1 = [(x==1050) for x in range(f_list1_length)]
-	print "length f1 >%d<" %len(f_list1)
+	#f_list1_length = force_reward_max - (force_reward_length/2)
+	#f_list1 = [(x==1050) for x in range(f_list1_length)]
+	#print "length f1 >%d<" %len(f_list1)
 
-	f_list_pos = np.linspace(0,1, num=force_reward_length/2)
-	print "length f-pos >%d<" %len(f_list_pos)
-
-
-	f_list_neg = np.linspace(0.99,0,num=force_reward_length/2)
-	print "length f-neg >%d<" %len(f_list_neg)
+	#f_list_pos = np.linspace(0,1, num=force_reward_length/2)
+	#print "length f-pos >%d<" %len(f_list_pos)
 
 
-	f_list2 = [(x==1050) for x in range((1024 - (len(f_list1) + len(f_list_pos) + len(f_list_neg) ) ))]
-	print "length f_list2 >%d<" %len(f_list2)
+	#f_list_neg = np.linspace(0.99,0,num=force_reward_length/2)
+	#print "length f-neg >%d<" %len(f_list_neg)
+
+
+	#f_list2 = [(x==1050) for x in range((1024 - (len(f_list1) + len(f_list_pos) + len(f_list_neg) ) ))]
+	#print "length f_list2 >%d<" %len(f_list2)
 
 	force_l_1 = np.linspace(0,1, num=force_reward_max)
 	print "length force_l_1 >%d<" %len(force_l_1)
@@ -112,9 +112,9 @@ def build_reward_state():
         #print(f2)
 
 	#angle = [(x==angle_goal) for x in range(angle_possible_max)]
-	angle1 = np.linspace(0,3, num=angle_goal)
+	angle1 = np.linspace(0,20, num=angle_goal)
 	print "length angle1 >%d<" %len(angle1)
-	angle2 = np.linspace(2.99,0, num=angle_possible_max-angle_goal)
+	angle2 = np.linspace(19.99,0, num=angle_possible_max-angle_goal)
 	print "length angle2 >%d<" %len(angle2)
 	angle.extend(angle1)
 	angle.extend(angle2)
@@ -176,6 +176,20 @@ def probability_callback(data):
     global probability_of_random_action
     probability_of_random_action = data.data
 
+def weight_variable(shape):
+    initial = tf.truncated_normal(shape, stddev=0.01)
+    return tf.Variable(initial)
+
+def bias_variable(shape):
+    initial = tf.constant(0.1, shape=shape)
+    return tf.Variable(initial)
+
+def conv2d(x, W):
+    return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
+
+def max_pool_2x2(x):
+    return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+
 #the main thread/program
 #it runs in a loop, todo something and learn to reach the angle_goal (in degree)
 def listener():
@@ -190,23 +204,63 @@ def listener():
     target = tf.placeholder("float", [None])
 
     #hidden_weights = tf.Variable(tf.constant(0., shape=[NUM_STATES, NUM_ACTIONS]))
-    Weights = tf.Variable(tf.truncated_normal([NUM_STATES*STATE_FRAMES, NUM_ACTIONS], mean=0.0, stddev=0.02, dtype=tf.float32, seed=1), name="Weights")
+    Weights = tf.Variable(tf.truncated_normal([NUM_STATES*STATE_FRAMES, NUM_ACTIONS], mean=0.1, stddev=0.02, dtype=tf.float32, seed=1), name="Weights")
     h_w_hist = tf.histogram_summary("Weights", Weights)
 
     #bias
     biases = tf.Variable(tf.zeros([NUM_ACTIONS]), name="biases")
     b_hist = tf.histogram_summary("biases", biases) 
 
-    #we feed in our state and fetch (1,9) array with values. Highest value is the action the NN would do
-    output = tf.matmul(state, Weights) + biases
-    o_hist = tf.histogram_summary("output", output)
+    conv_weights_1 = weight_variable([5,5,1,32])
+    conv_biases_1 = bias_variable([32])
 
+    #
+    fc1_weights = weight_variable([25*25*32, 2450])
+    fc1_biases = bias_variable([2450])
+    fc1_b_hist = tf.histogram_summary("fc1_biases", fc1_biases)
+    fc1_w_hist = tf.histogram_summary("fc1_weights", fc1_weights)
+
+    fc2_weights = weight_variable([2450, 9])
+    fc2_biases = bias_variable([9])
+    fc2_w_hist = tf.histogram_summary("fc2_weights", fc2_weights)
+    fc2_b_hist = tf.histogram_summary("fc2_biases", fc2_biases)
+
+    #reshape state from 1,2450  to 50,49
+    conv_state_1 = tf.reshape(state, [-1, 50, 49, 1])
+
+    h_conv1 = tf.nn.relu(conv2d(conv_state_1, conv_weights_1) + conv_biases_1)
+    h_pool1 = max_pool_2x2(h_conv1)
+
+    h_pool1_flat = tf.reshape(h_pool1, [-1, 25*25*32])
+    final_hidden_activation = tf.nn.relu(tf.matmul(h_pool1_flat, fc1_weights, name='final_hidden_activation') + fc1_biases)
+
+    output_layer = tf.matmul(final_hidden_activation, fc2_weights) + fc2_biases
+    ol_hist = tf.histogram_summary("output_layer", output_layer)
+
+    #we feed in our state and fetch (1,9) array with values. Highest value is the action the NN would do
+    #output = tf.matmul(state, Weights) + biases
+    #o_hist = tf.histogram_summary("output", output)
+
+    #output1 = tf.nn.relu(output)
+    #output1 = tf.nn.softmax(output)
+    #o1_hist = tf.histogram_summary("output1", output1)
+ 
+ 
     #we feed in the action the NN would do and targets=rewards ???
-    readout_action = tf.reduce_sum(tf.mul(output, action), reduction_indices=1)
+    readout_action = tf.reduce_sum(tf.mul(output_layer, action), reduction_indices=1)
+    r_hist = tf.histogram_summary("readout_action", readout_action)
+
+    #r2 = tf.nn.softmax(readout_action)
+
+    #relu_action = tf.nn.relu(readout_action)
+    #relu_hist = tf.histogram_summary("relu_action", relu_action)
+    #sig_action = tf.nn.sigmoid(readout_action)
+    #sig_hist = tf.histogram_summary("sig_action", sig_action)
 
     with tf.name_scope("loss_summary"):
     	#loss = tf.reduce_mean(tf.square(output - target))
 	loss = tf.reduce_mean(tf.square(target - readout_action))
+	#loss = tf.reduce_mean(tf.square(output_layer - target))
     	tf.scalar_summary("loss", loss)
 
     merged = tf.merge_all_summaries()
@@ -218,8 +272,8 @@ def listener():
     session.run(tf.initialize_all_variables())
     saver = tf.train.Saver()
 
-    if os.path.isfile("/home/ros/tensorflow-models/model.ckpt"):
-	saver.restore(session, "/home/ros/tensorflow-models/model.ckpt")
+    if os.path.isfile("/home/ros/tensorflow-models/model-mini.ckpt"):
+	saver.restore(session, "/home/ros/tensorflow-models/model-mini.ckpt")
 	rospy.loginfo("model restored")
 	
 
@@ -241,7 +295,7 @@ def listener():
     last_action[0] = 1   #stop action
     sum_writer_index = 0
     MEMORY_SIZE = 10000
-    OBSERVATION_STEPS = 5
+    OBSERVATION_STEPS = 20 
     FUTURE_REWARD_DISCOUNT = 0.9
 
     STEPPER = 0	
@@ -259,7 +313,7 @@ def listener():
 		state_from_env = np.reshape(state_from_env,(NUM_STATES,1))
 
 		#for the first time we run, we build last_state with 4-last-states
-		last_state = np.stack(tuple(state_from_env for _ in range(4)), axis=2)
+		last_state = np.stack(tuple(state_from_env for _ in range(STATE_FRAMES)), axis=2)
 		
 		a=2
 	elif a==1:
@@ -284,8 +338,9 @@ def listener():
 		else :
 			rospy.loginfo("learned action")
 			#or we readout learned action
-			last_state_array = np.reshape(last_state, (NUM_STATES*4))
-			current_action1 = session.run(output, feed_dict={state: [last_state_array]})
+			last_state_array = np.reshape(last_state, (NUM_STATES*STATE_FRAMES))
+			current_action1 = session.run(output_layer, feed_dict={state: [last_state_array]})
+			current_action = np.zeros([NUM_ACTIONS])
 			#current_action1 is not a array ?? build it new
 			current_action[np.argmax(current_action1)] = 1
 			STEPPER = 0
@@ -310,8 +365,8 @@ def listener():
 				max_idx=0
 				punish = 1
 
-		if current_force_1 > 35:
-			if current_force_2 > 35:
+		if current_force_1 > 30:
+			if current_force_2 > 30:
 				if max_idx==1 or max_idx==3 or max_idx==4 or max_idx==5 or max_idx==7:
 					max_idx=0
 					punish = 1
@@ -320,7 +375,7 @@ def listener():
 					max_idx=0
 					punish = 1
 
-		if current_force_2 > 35:
+		if current_force_2 > 30:
 			if max_idx==1 or max_idx==3 or max_idx==4:
 				max_idx=0
 				punish = 1
@@ -414,7 +469,7 @@ def listener():
 		if len(observations) > MEMORY_SIZE:
 			observations.popleft()
 		
-		if len(observations) > OBSERVATION_STEPS:
+		if len(observations) % OBSERVATION_STEPS == 0:
 			#train
 			rospy.loginfo("train network-----------------------------------------")
 
@@ -423,19 +478,23 @@ def listener():
         		actions = [d[1] for d in mini_batch]
 			rewards = [d[2] for d in mini_batch]
 			current_states = [d[3] for d in mini_batch]
-			current_states = np.reshape(current_states, (MINI_BATCH_SIZE, NUM_STATES*4))
-			previous_states = np.reshape(previous_states, (MINI_BATCH_SIZE, NUM_STATES*4))
+			current_states = np.reshape(current_states, (MINI_BATCH_SIZE, NUM_STATES*STATE_FRAMES))
+			previous_states = np.reshape(previous_states, (MINI_BATCH_SIZE, NUM_STATES*STATE_FRAMES))
 
 			agents_expected_reward = []
 			
-			agents_reward_per_action = session.run(output, feed_dict={state: current_states})
-
+			agents_reward_per_action = session.run(output_layer, feed_dict={state: current_states})
+			print("tt-rewards", rewards)
+			print("tt-agents_reward_per_action", agents_reward_per_action)
 			for i in range(len(mini_batch)):
 				agents_expected_reward.append(rewards[i] + FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
 
 			agents_expected_reward = np.reshape(agents_expected_reward, (MINI_BATCH_SIZE))
 			
-	
+			actions = np.asarray(actions)	
+			print("tt-actions", actions)
+			print("tt-target", agents_expected_reward)
+			print("tt-pre-stat", previous_states)
         		_, result = session.run([train_operation, merged], feed_dict={state: previous_states, action : actions, target: agents_expected_reward})
 
 
@@ -452,7 +511,7 @@ def listener():
 
 
 
-    save_path = saver.save(session, "/home/ros/tensorflow-models/model.ckpt")
+    save_path = saver.save(session, "/home/ros/tensorflow-models/model-mini.ckpt")
     rospy.loginfo("model saved---------")
     session.close()
 
