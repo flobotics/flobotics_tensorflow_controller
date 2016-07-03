@@ -14,18 +14,20 @@ import os.path
 ########
 
 
-NUM_STATES = 201+201+1024+1024  #200 degree angle_goal, 200 possible degrees the joint could move, 1024 force values, two times
+NUM_STATES = 264+264+1024+1024+1024+1024  #264 degree angle_goal, 264 possible degrees the joint could move, 1024 force values, two times
 NUM_ACTIONS = 9  #3^2=9      ,one stop-state, one different speed left, one diff.speed right, two servos
 STATE_FRAMES = 1
 GAMMA = 0.5
-RESIZED_DATA_X = 12
-RESIZED_DATA_Y = 204   #12*204 = 2448 = NUM_STATES
+RESIZED_DATA_X = 68
+RESIZED_DATA_Y = 68   # = NUM_STATES
 
 force_reward_max = 15  #where should the max/middle point be, we get force values from 0.0 - 1023.0 (float),
 force_reward_length = 10  #how long/big the area around max
 force_max_value = 1024     #how much force values possible
-angle_goal = 105		#to which angle should it go, get reward  #100 is the middle position
-angle_possible_max = 201  #how many degrees the angle can go max
+degree_goal = 105		#to which angle should it go, get reward  #100 is the middle position
+force_1_goal = 15
+force_2_goal = 15
+degree_possible_max = 264  #how many degrees the angle can go max
 current_degree = 0     #will be filled periodically from  callback-function
 current_force_1 = 0    #will be filled periodically from  callback-function
 current_force_2 = 0    #will be filled periodically from  callback-function
@@ -47,83 +49,11 @@ s2_bwd_1 = 394
 sx0 = 1050  #do nothing value for not-used servos
 
 observations = deque()
-#state_batch = []
-#rewards_batch = []
-#actions_batch = []
 
 
 MINI_BATCH_SIZE = 10 
 probability_of_random_action = 1
 
-#   degree      force1      force2
-#         |
-#         |         /\         /\
-# --------|--------/  \-------/  \---------
-#
-# for degree we reward only the direct reaching of the angle_goal, 
-# for force1 and force2, we reward with a little pyramid, so that 
-# it does not need to be exactly there (is that right??)
-#
-
-
-
-def build_reward_state():
-	#f_list1_length = force_reward_max - (force_reward_length/2)
-	#f_list1 = [(x==1050) for x in range(f_list1_length)]
-	#print "length f1 >%d<" %len(f_list1)
-
-	#f_list_pos = np.linspace(0,1, num=force_reward_length/2)
-	#print "length f-pos >%d<" %len(f_list_pos)
-
-
-	#f_list_neg = np.linspace(0.99,0,num=force_reward_length/2)
-	#print "length f-neg >%d<" %len(f_list_neg)
-
-
-	#f_list2 = [(x==1050) for x in range((1024 - (len(f_list1) + len(f_list_pos) + len(f_list_neg) ) ))]
-	#print "length f_list2 >%d<" %len(f_list2)
-
-	force_l_1 = np.linspace(0,1, num=force_reward_max)
-	print "length force_l_1 >%d<" %len(force_l_1)
-	force_l_2 = np.linspace(0.99,0, num=force_max_value-force_reward_max)
-	print "length force_l_2 >%d<" %len(force_l_2)
-	f1.extend(force_l_1)
-	f1.extend(force_l_2)
-	f2.extend(force_l_1)
-	f2.extend(force_l_2)
-	
-	#c = []
-	#f1.extend(f_list1)
-	#f1.extend(f_list_pos)
-	#f1.extend(f_list_neg)
-	#f1.extend(f_list2)
-	#f1[0] = -1
-	#f1[1] = -1
-	#f1[1023] = -1
-	#print(f1)
-	#copy the same into f2
-        #f2.extend(f_list1)
-        #f2.extend(f_list_pos)
-        #f2.extend(f_list_neg)
-        #f2.extend(f_list2)
-	#f2[0] = -1
-	#f2[1] = -1
-	#f2[1023] = -1
-        #print(f2)
-
-	#angle = [(x==angle_goal) for x in range(angle_possible_max)]
-	angle1 = np.linspace(0,20, num=angle_goal)
-	print "length angle1 >%d<" %len(angle1)
-	angle2 = np.linspace(19.99,0, num=angle_possible_max-angle_goal)
-	print "length angle2 >%d<" %len(angle2)
-	angle.extend(angle1)
-	angle.extend(angle2)
-	#print(angle)	
-
-	states.extend(angle)
-	states.extend(f1)
-	states.extend(f2)
-	print "length of states >%d>" %len(states)
 
 
 # we get the current state, that means, current degree and current forces. 
@@ -135,23 +65,54 @@ def build_reward_state():
 #    |               |
 #    |               |         /\         /\
 # ---|---------------|--------/  \-------/  \---------
-
+# 68x68 = 4624 => 264_degree *2 + 4*1024
 
 def get_current_state():
 	global current_degree
 	global current_force_1
 	global current_force_2
-	global angle_goal
-	a1 = [(x==angle_goal) for x in range(angle_possible_max)]
-	a = [(x==current_degree) for x in range(angle_possible_max)]
-	b = [(x==current_force_1) for x in range(force_max_value)]
-	c = [(x==current_force_2) for x in range(force_max_value)]
+	global degree_goal
+	a1 = [(x==current_degree) for x in range(degree_possible_max)]
+	a2 = [(x==current_force_1) for x in range(force_max_value)]
+	a3 = [(x==current_force_2) for x in range(force_max_value)]
+        
+	b1 = np.linspace(0, 20, num=degree_goal)
+	b2 = np.linspace(19.9, 0, num=degree_possible_max-degree_goal)
+
+	b3 = np.linspace(0, 1, num=force_reward_max)
+	b4 = np.linspace(0.99, 0, num=force_max_value-force_reward_max)
+
+	b5 = np.linspace(0, 1, num=force_reward_max)
+	b6 = np.linspace(0.99, 0, num=force_max_value-force_reward_max)
+
 	d = []
 	d.extend(a1)
-	d.extend(a)
-	d.extend(b)
-	d.extend(c)
+	d.extend(a2)
+	d.extend(a3)
+	d.extend(b1)
+	d.extend(b2)
+	d.extend(b3)
+	d.extend(b4)
+	d.extend(b5)
+	d.extend(b6)
+	rospy.loginfo("get_current_state: len_4624 state >%d<", len(d))
 	return d
+
+def get_reward(state):
+	s = np.asarray(state)
+	s = s.reshape(2, 2312)
+	print("get_reward: s.shape", s.shape)
+
+	s1 = s[0] * s[1]
+	print("get_reward: s1 shape", s1.shape)
+	print("get_reward: s1", s1)
+	print("get_reward: s0", s[0])
+
+	s2 = sum(s1)
+	print("get_reward: s2 sum", s2)
+
+	return s2
+
 
 # callback which delivers us periodically the adc values of the force sensors
 # adc values are floats from 0.0 to 5.0.  we convert them to int from 0.0-1023.0  (float)
@@ -197,7 +158,7 @@ def listener():
     rospy.init_node('listener', anonymous=True)
 
     session = tf.Session()
-    build_reward_state()
+    #build_reward_state()
 
     state = tf.placeholder("float", [None, NUM_STATES*STATE_FRAMES])
     action = tf.placeholder("float", [None, NUM_ACTIONS])
@@ -438,24 +399,11 @@ def listener():
 
 		#we get our state
 		state_from_env = get_current_state()
+		reward = get_reward(state_from_env)
 
 		state_from_env1 = np.reshape(state_from_env, (NUM_STATES, 1,1))
 		current_state = np.append(last_state[:,:,1:], state_from_env1, axis=2)
 
-		#we calculate the reward, for that we use states[] from build_reward_state()
-                #the reward for reaching the degree/angle_goal
-                #rospy.loginfo("current_degree %d",  current_degree)
-		#rospy.loginfo("current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
-		#print("states len", len(states))
-
-
-		r1 = state_from_env[angle_possible_max-1 + current_degree] + states[current_degree]
-                #the reward for holding a specified force on wire-1
-                r2 = state_from_env[angle_possible_max-1 + angle_possible_max + current_force_1] + states[angle_possible_max-1 + current_force_1]
-                #the reward for holding a specified force on wire-2
-                r3 = state_from_env[angle_possible_max-1 + angle_possible_max + force_max_value + current_force_2] + states[angle_possible_max-1 + force_max_value + current_force_2]
-                #add them
-                reward = r1 + r2 + r3
 
 		if punish==1:
 			punish=0
