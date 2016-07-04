@@ -40,12 +40,12 @@ states = []
 
 #variables for bad-mapping approach, s1=servo1 , s2=servo2,.... 
 s1_stop = 377
-s1_fwd_1 = 380
+s1_fwd_1 = 381
 s1_bwd_1 = 373
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
 s2_stop = 399
-s2_fwd_1 = 406
-s2_bwd_1 = 394
+s2_fwd_1 = 405
+s2_bwd_1 = 396
 sx0 = 1050  #do nothing value for not-used servos
 
 observations = deque()
@@ -160,14 +160,23 @@ def listener():
     action = tf.placeholder("float", [None, NUM_ACTIONS])
     target = tf.placeholder("float", [None])
 
-    conv_weights_1 = weight_variable([8,8,4,32], "conv1_weights")
-    conv_biases_1 = bias_variable([32], "conv1_biases")
+    with tf.name_scope("conv1") as conv1:
+	conv_weights_1 = weight_variable([8,8,4,32], "conv1_weights")
+    	conv_biases_1 = bias_variable([32], "conv1_biases")
+	cw1_hist = tf.histogram_summary("conv1/weights", conv_weights_1)
+	cb1_hist = tf.histogram_summary("conv1/biases", conv_biases_1)
 
-    conv_weights_2 = weight_variable([4,4,32,64], "conv2_weights")
-    conv_biases_2 = bias_variable([64], "conv2_biases")
+    with tf.name_scope("conv2") as conv2:
+    	conv_weights_2 = weight_variable([4,4,32,64], "conv2_weights")
+    	conv_biases_2 = bias_variable([64], "conv2_biases")
+	cw2_hist = tf.histogram_summary("conv2/weights", conv_weights_2)
+	cb2_hist = tf.histogram_summary("conv2/biases", conv_biases_2)
 
-    conv_weights_3 = weight_variable([3,3,64,64], "conv3_weights")
-    conv_biases_3 = bias_variable([64], "conv3_biases")
+    with tf.name_scope("conv3") as conv3:
+    	conv_weights_3 = weight_variable([3,3,64,64], "conv3_weights")
+    	conv_biases_3 = bias_variable([64], "conv3_biases")
+	cw3_hist = tf.histogram_summary("conv3/weights", conv_weights_3)
+	cb3_hist = tf.histogram_summary("conv3/biases", conv_biases_3)
 
     with tf.name_scope("fc_1") as fc_1:
     	fc1_weights = weight_variable([2*2*64, 4624], "fc1_weights")
@@ -330,13 +339,11 @@ def listener():
 				max_idx=5
 				current_action = np.zeros([NUM_ACTIONS])
 				current_action[5] = 1
-				punish = 1
 		elif current_degree > 170:
 			if max_idx==3 or max_idx==4 or max_idx==5:
 				max_idx=7
 				current_action = np.zeros([NUM_ACTIONS])
 				current_action[7] = 1
-				punish = 1
 		
 		rospy.loginfo("action we publish >%d<", max_idx)
 		if max_idx==0:
