@@ -8,6 +8,10 @@ import numpy as np
 import random
 from collections import deque
 import os.path
+import roslib
+from sensor_msgs.msg import Image
+import sys, time
+
 
 ####### description
 #### http://discourse.ros.org/t/robotic-humanoid-hand/188
@@ -76,39 +80,69 @@ def get_current_state():
 	global current_force_2
 	global degree_goal
 	a1 = [(x==current_degree) for x in range(degree_possible_max)]
+	a1 = np.array(a1) * 255
 	a2 = [(x==current_force_1) for x in range(force_max_value)]
+	a2 = np.array(a2) * 255
 	a3 = [(x==current_force_2) for x in range(force_max_value)]
-        
-	b1 = np.linspace(0, 20, num=degree_goal)
-	b2 = np.linspace(19.9, 0, num=degree_possible_max-degree_goal)
+	a3 = np.array(a3) * 255        
 
-	b3 = np.linspace(0, 1, num=force_1_goal)
-	b4 = np.linspace(0.99, 0, num=force_max_value-force_1_goal)
+	b1 = np.linspace(0, 255.0, num=5)
+	b2 = np.linspace(255.0, 0, num=5)
 
-	b5 = np.linspace(0, 1, num=force_2_goal)
-	b6 = np.linspace(0.99, 0, num=force_max_value-force_2_goal)
+	b3 = np.linspace(0,0, num=(degree_goal - 5))
+	b4 = np.linspace(0,0, num=(degree_possible_max - (degree_goal + 5)))
+	b5 = np.linspace(0,0, num=(force_1_goal - 5))
+	b6 = np.linspace(0,0, num=(force_max_value - (force_1_goal + 5)))
+
 
 	d = []
 	d.extend(a1)
 	d.extend(a2)
 	d.extend(a3)
+	d.extend(b3)
 	d.extend(b1)
 	d.extend(b2)
-	d.extend(b3)
 	d.extend(b4)
 	d.extend(b5)
+	d.extend(b1)
+	d.extend(b2)
 	d.extend(b6)
-	#rospy.loginfo("get_current_state: len_4624 state >%d<", len(d))
+	d.extend(b5)
+	d.extend(b1)
+	d.extend(b2)
+	d.extend(b6)
+	rospy.loginfo("get_current_state: len_4624 state >%d<", len(d))
 	return d
 
+#the reward for reaching the degree_goal and force_1/2_goal
+#
 def get_reward(state):
 	s = np.asarray(state)
 	s = s.reshape(2, 2312)
 
-	s1 = s[0] * s[1]
+	s1 = (s[0] / 255) * s[1]
 	s2 = sum(s1)
 
 	return s2
+
+#we publish an image of the state, to look what the network is seeing
+#
+def publish_state_image(state_from_env1, current_state_image_pub):
+	current_state_image_msg = Image()
+        current_state_image_msg.encoding = "mono8"
+        current_state_image_msg.header.stamp = rospy.Time.now()
+        current_state_image_msg.height = 68
+        current_state_image_msg.width = 34
+        current_state_image_msg.step = 68
+        x = np.reshape(state_from_env1, (2,2312))
+        idx_x = np.argwhere(x[0] == np.amax(x[0]))
+        lx = idx_x.flatten().tolist()
+        x[1][lx[0]] = 255
+        x[1][lx[1]] = 255
+        x[1][lx[2]] = 255
+        y = x[1].tolist()
+        current_state_image_msg.data = y
+	current_state_image_pub.publish(current_state_image_msg)
 
 
 # callback which delivers us periodically the adc values of the force sensors
@@ -237,6 +271,7 @@ def listener():
     rospy.Subscriber("degree", Float32, degree_callback)
     rospy.Subscriber("probability", Float32, probability_callback)
     servo_pub = rospy.Publisher('servo_pwm_pi_sub', Int16MultiArray, queue_size=1)
+    current_state_image_pub = rospy.Publisher('current_state_image', Image, queue_size=1)
 
     #the loop runs at 1hz
     rate = rospy.Rate(1)
@@ -391,6 +426,8 @@ def listener():
 
 		state_from_env1 = np.reshape(state_from_env, (RESIZED_DATA_X, RESIZED_DATA_Y,1))
 		current_state = np.append(last_state[:,:,1:], state_from_env1, axis=2)
+
+		publish_state_image(state_from_env1, current_state_image_pub)
 
 		if punish==1:
 			punish=0
