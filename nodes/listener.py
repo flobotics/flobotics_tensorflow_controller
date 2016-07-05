@@ -55,7 +55,7 @@ sx0 = 1050  #do nothing value for not-used servos
 observations = deque()
 
 
-MINI_BATCH_SIZE = 20 
+MINI_BATCH_SIZE = 5 
 probability_of_random_action = 1
 
 
@@ -199,18 +199,24 @@ def listener():
     	conv_biases_1 = bias_variable([32], "conv1_biases")
 	cw1_hist = tf.histogram_summary("conv1/weights", conv_weights_1)
 	cb1_hist = tf.histogram_summary("conv1/biases", conv_biases_1)
+	c1 = tf.reshape(conv_weights_1, [32, 8,8, 4])
+	cw1_image_hist = tf.image_summary("conv1_w", c1)
 
     with tf.name_scope("conv2") as conv2:
     	conv_weights_2 = weight_variable([4,4,32,64], "conv2_weights")
     	conv_biases_2 = bias_variable([64], "conv2_biases")
 	cw2_hist = tf.histogram_summary("conv2/weights", conv_weights_2)
 	cb2_hist = tf.histogram_summary("conv2/biases", conv_biases_2)
+	c2 = tf.reshape(conv_weights_2, [32,64,4,4])
+	cw2_image_hist = tf.image_summary("conv2_w", c2)
 
     with tf.name_scope("conv3") as conv3:
     	conv_weights_3 = weight_variable([3,3,64,64], "conv3_weights")
     	conv_biases_3 = bias_variable([64], "conv3_biases")
 	cw3_hist = tf.histogram_summary("conv3/weights", conv_weights_3)
 	cb3_hist = tf.histogram_summary("conv3/biases", conv_biases_3)
+	c3 = tf.reshape(conv_weights_3, [64,64,3,3])
+	cw3_image_hist = tf.image_summary("conv3_w", c3)
 
     with tf.name_scope("fc_1") as fc_1:
     	fc1_weights = weight_variable([2*2*64, 4624], "fc1_weights")
@@ -286,7 +292,7 @@ def listener():
     last_state = None
     sum_writer_index = 0
     MEMORY_SIZE = 10000
-    OBSERVATION_STEPS = 50 
+    OBSERVATION_STEPS = 5 
     FUTURE_REWARD_DISCOUNT = 0.9
 
     STEPPER = 0	
