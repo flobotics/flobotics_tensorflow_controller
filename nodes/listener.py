@@ -11,7 +11,7 @@ import os.path
 import roslib
 from sensor_msgs.msg import Image
 import sys, time
-
+import pickle
 
 ####### description
 #### http://discourse.ros.org/t/robotic-humanoid-hand/188
@@ -48,14 +48,14 @@ s1_fwd_1 = 381
 s1_bwd_1 = 373
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
 s2_stop = 399
-s2_fwd_1 = 405
-s2_bwd_1 = 396
+s2_fwd_1 = 406
+s2_bwd_1 = 394
 sx0 = 1050  #do nothing value for not-used servos
 
 observations = deque()
 
 
-MINI_BATCH_SIZE = 5 
+MINI_BATCH_SIZE = 100 
 probability_of_random_action = 1
 
 
@@ -111,7 +111,7 @@ def get_current_state():
 	d.extend(b1)
 	d.extend(b2)
 	d.extend(b6)
-	rospy.loginfo("get_current_state: len_4624 state >%d<", len(d))
+	#rospy.loginfo("get_current_state: len_4624 state >%d<", len(d))
 	return d
 
 #the reward for reaching the degree_goal and force_1/2_goal
@@ -291,9 +291,13 @@ def listener():
     last_action[0] = 1   #stop action
     last_state = None
     sum_writer_index = 0
-    MEMORY_SIZE = 10000
-    OBSERVATION_STEPS = 5 
+    MEMORY_SIZE = 100000
+    OBSERVATION_STEPS = 1000 
     FUTURE_REWARD_DISCOUNT = 0.9
+    observations = None
+    if os.path.isfile("/home/ros/pickle-dump/save.p"):
+	observations = pickle.load(open("/home/ros/pickle-dump/save.p", "rb"))
+	rospy.loginfo("loaded observations, length is >%d<", len(observations))
 
     STEPPER = 0	
     punish = 0
@@ -345,8 +349,8 @@ def listener():
 		#how do i map 32 or even more values to the appropriate action?
 		
 		#rospy.loginfo("blocker: current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
-		if current_force_1 == 0:
-			if current_force_2==0:
+		if current_force_1 < 5:
+			if current_force_2 < 5:
 				if max_idx==2 or max_idx==5 or max_idx==6 or max_idx==7 or max_idx==8:
 					max_idx=0
 					punish = 1
@@ -354,13 +358,13 @@ def listener():
 				if max_idx==2 or max_idx==8:
 					max_idx=0
 					punish = 1
-		elif current_force_2==0:
+		elif current_force_2 < 5:
 			if max_idx==6 or max_idx==7 or max_idx==8:
 				max_idx=0
 				punish = 1
 
-		if current_force_1 > 30:
-			if current_force_2 > 30:
+		if current_force_1 > 35:
+			if current_force_2 > 35:
 				if max_idx==1 or max_idx==3 or max_idx==4 or max_idx==5 or max_idx==7:
 					max_idx=0
 					punish = 1
@@ -369,18 +373,18 @@ def listener():
 					max_idx=0
 					punish = 1
 
-		if current_force_2 > 30:
+		if current_force_2 > 35:
 			if max_idx==1 or max_idx==3 or max_idx==4:
 				max_idx=0
 				punish = 1
 
 
-		if current_degree < 30:
+		if current_degree < 40:
 			if max_idx==1 or max_idx==4 or max_idx==7:
 				max_idx=5
 				current_action = np.zeros([NUM_ACTIONS])
 				current_action[5] = 1
-		elif current_degree > 170:
+		elif current_degree > 160:
 			if max_idx==3 or max_idx==4 or max_idx==5:
 				max_idx=7
 				current_action = np.zeros([NUM_ACTIONS])
@@ -486,6 +490,7 @@ def listener():
     save_path = saver.save(session, "/home/ros/tensorflow-models/model-mini.ckpt")
     rospy.loginfo("model saved---------")
     session.close()
+    pickle.dump(observations, open("/home/ros/pickle-dump/save.p", "wb"))
 
     # spin() simply keeps python from exiting until this node is stopped
     #rospy.spin()
