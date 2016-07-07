@@ -44,8 +44,8 @@ states = []
 
 #variables for bad-mapping approach, s1=servo1 , s2=servo2,.... 
 s1_stop = 377
-s1_fwd_1 = 381
-s1_bwd_1 = 373
+s1_fwd_1 = 382
+s1_bwd_1 = 372
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
 s2_stop = 399
 s2_fwd_1 = 406
@@ -159,9 +159,9 @@ def adc_callback(data):
 #callback which delivers us periodically the degree, from 0.0-200.0 degree (float)
 def degree_callback(data):
     #rospy.loginfo(rospy.get_caller_id() + "degree heard %f", data.data)
-    #minus 100, because 0 degree is the middle position
+    # 132, because 0 degree is the middle position
     global current_degree
-    current_degree = int(data.data + 100)
+    current_degree = int(data.data + 132)
 
 def probability_callback(data):
     rospy.loginfo("probability heard %f", data.data)
@@ -352,44 +352,73 @@ def listener():
 		if current_force_1 < 5:
 			if current_force_2 < 5:
 				if max_idx==2 or max_idx==5 or max_idx==6 or max_idx==7 or max_idx==8:
-					max_idx=0
-					punish = 1
+					idx_array = [1,3,4]
+					idx_rand = random.randrange(3)
+					#max_idx=1
+					current_action = np.zeros([NUM_ACTIONS])
+					current_action[idx_array[idx_rand]] = 1
+					#punish = 1
 			else:
 				if max_idx==2 or max_idx==8:
-					max_idx=0
-					punish = 1
+					idx_array = [1,3,4,5,6,7]
+					idx_rand = random.randrange(6)
+					#max_idx=3
+					current_action = np.zeros([NUM_ACTIONS])
+					current_action[idx_array[idx_rand]] = 1
+					#punish = 1
 		elif current_force_2 < 5:
 			if max_idx==6 or max_idx==7 or max_idx==8:
-				max_idx=0
-				punish = 1
+				idx_array = [1,2,3,4,5]
+				idx_rand = random.randrange(5)
+				#max_idx=5
+				current_action = np.zeros([NUM_ACTIONS])
+				current_action[idx_array[idx_rand]] = 1
+				#punish = 1
 
 		if current_force_1 > 35:
 			if current_force_2 > 35:
 				if max_idx==1 or max_idx==3 or max_idx==4 or max_idx==5 or max_idx==7:
-					max_idx=0
-					punish = 1
+					idx_array = [2,6,8]
+					idx_rand = random.randrange(3)
+					#max_idx=8
+					current_action = np.zeros([NUM_ACTIONS])
+					current_action[idx_array[idx_rand]] = 1
+					#punish = 1
 			else:
 				if max_idx==1 or max_idx==3 or max_idx==4 or max_idx==7:
-					max_idx=0
-					punish = 1
+					idx_array = [2,5,6,8]
+					idx_rand = random.randrange(4)
+					#max_idx=5
+					current_action = np.zeros([NUM_ACTIONS])
+					current_action[idx_array[idx_rand]] = 1
+					#punish = 1
 
 		if current_force_2 > 35:
 			if max_idx==1 or max_idx==3 or max_idx==4:
-				max_idx=0
-				punish = 1
+				idx_array = [2,5,6,7,8]
+				idx_rand = random.randrange(5)
+				#max_idx=6
+				current_action = np.zeros([NUM_ACTIONS])
+				current_action[idx_array[idx_rand]] = 1
+				#punish = 1
 
 
-		if current_degree < 40:
+		if current_degree < -80:
 			if max_idx==1 or max_idx==4 or max_idx==7:
-				max_idx=5
+				idx_array = [2,3,5,6,8]
+				idx_rand = random.randrange(5)
+				#max_idx=5
 				current_action = np.zeros([NUM_ACTIONS])
-				current_action[5] = 1
-		elif current_degree > 160:
+				current_action[idx_array[idx_rand]] = 1
+		elif current_degree > 80:
 			if max_idx==3 or max_idx==4 or max_idx==5:
-				max_idx=7
+				idx_array = [1,2,6,7,8]
+				idx_rand = random.randrange(5)
+				#max_idx=7
 				current_action = np.zeros([NUM_ACTIONS])
-				current_action[7] = 1
+				current_action[idx_array[idx_rand]] = 1
 		
+
 		rospy.loginfo("action we publish >%d<", max_idx)
 		if max_idx==0:
 			#2 servos stop
@@ -490,7 +519,9 @@ def listener():
     save_path = saver.save(session, "/home/ros/tensorflow-models/model-mini.ckpt")
     rospy.loginfo("model saved---------")
     session.close()
+    rospy.loginfo("saving pickle, takes some time, perhaps minutes")
     pickle.dump(observations, open("/home/ros/pickle-dump/save.p", "wb"))
+    rospy.loginfo("pickle saved")
 
     # spin() simply keeps python from exiting until this node is stopped
     #rospy.spin()
