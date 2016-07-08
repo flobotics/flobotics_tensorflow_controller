@@ -48,14 +48,14 @@ s1_fwd_1 = 382
 s1_bwd_1 = 372
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
 s2_stop = 399
-s2_fwd_1 = 406
-s2_bwd_1 = 394
+s2_fwd_1 = 403
+s2_bwd_1 = 395
 sx0 = 1050  #do nothing value for not-used servos
 
 observations = deque()
 
 
-MINI_BATCH_SIZE = 100 
+MINI_BATCH_SIZE = 20 
 probability_of_random_action = 1
 
 
@@ -161,7 +161,7 @@ def degree_callback(data):
     #rospy.loginfo(rospy.get_caller_id() + "degree heard %f", data.data)
     # 132, because 0 degree is the middle position
     global current_degree
-    current_degree = int(data.data + 132)
+    current_degree = int(data.data) +132
 
 def probability_callback(data):
     rospy.loginfo("probability heard %f", data.data)
@@ -292,9 +292,10 @@ def listener():
     last_state = None
     sum_writer_index = 0
     MEMORY_SIZE = 100000
-    OBSERVATION_STEPS = 1000 
+    OBSERVATION_STEPS = 100
     FUTURE_REWARD_DISCOUNT = 0.9
-    observations = None
+    global observations
+
     if os.path.isfile("/home/ros/pickle-dump/save.p"):
 	observations = pickle.load(open("/home/ros/pickle-dump/save.p", "rb"))
 	rospy.loginfo("loaded observations, length is >%d<", len(observations))
@@ -349,74 +350,80 @@ def listener():
 		#how do i map 32 or even more values to the appropriate action?
 		
 		#rospy.loginfo("blocker: current_force_1 >%f<  2 >%f<", current_force_1, current_force_2)
+		rospy.loginfo("----degree %f", current_degree)
 		if current_force_1 < 5:
 			if current_force_2 < 5:
-				if max_idx==2 or max_idx==5 or max_idx==6 or max_idx==7 or max_idx==8:
-					idx_array = [1,3,4]
-					idx_rand = random.randrange(3)
-					#max_idx=1
+				if current_degree < 80:
+					idx_array = [3,5]
+					idx_rand = random.randrange(2)
 					current_action = np.zeros([NUM_ACTIONS])
 					current_action[idx_array[idx_rand]] = 1
+					rospy.loginfo("force 1 & 2 < 5, degree < -60, change to %d", idx_array[idx_rand])
+					max_idx=idx_array[idx_rand]
 					#punish = 1
-			else:
-				if max_idx==2 or max_idx==8:
-					idx_array = [1,3,4,5,6,7]
+				elif current_degree > 180:
+					idx_array = [1,7]
+					idx_rand = random.randrange(2)
+                                        current_action = np.zeros([NUM_ACTIONS])
+                                        current_action[idx_array[idx_rand]] = 1
+                                        rospy.loginfo("force 1 & 2 < 5, degree > +60, change to %d", idx_array[idx_rand])
+					max_idx=idx_array[idx_rand]
+				else:
+					idx_array = [0,1,3,4,5,7]
 					idx_rand = random.randrange(6)
-					#max_idx=3
-					current_action = np.zeros([NUM_ACTIONS])
-					current_action[idx_array[idx_rand]] = 1
-					#punish = 1
-		elif current_force_2 < 5:
-			if max_idx==6 or max_idx==7 or max_idx==8:
-				idx_array = [1,2,3,4,5]
-				idx_rand = random.randrange(5)
-				#max_idx=5
-				current_action = np.zeros([NUM_ACTIONS])
-				current_action[idx_array[idx_rand]] = 1
-				#punish = 1
+                                        current_action = np.zeros([NUM_ACTIONS])
+                                        current_action[idx_array[idx_rand]] = 1
+                                        rospy.loginfo("force 1 & 2 < 5, degree ok, change to %d", idx_array[idx_rand])
+                                        max_idx=idx_array[idx_rand]
 
-		if current_force_1 > 35:
-			if current_force_2 > 35:
-				if max_idx==1 or max_idx==3 or max_idx==4 or max_idx==5 or max_idx==7:
-					idx_array = [2,6,8]
-					idx_rand = random.randrange(3)
-					#max_idx=8
-					current_action = np.zeros([NUM_ACTIONS])
-					current_action[idx_array[idx_rand]] = 1
-					#punish = 1
 			else:
-				if max_idx==1 or max_idx==3 or max_idx==4 or max_idx==7:
-					idx_array = [2,5,6,8]
-					idx_rand = random.randrange(4)
-					#max_idx=5
-					current_action = np.zeros([NUM_ACTIONS])
-					current_action[idx_array[idx_rand]] = 1
-					#punish = 1
+				if current_degree < 80:
+					idx_array = [3,5]
+					idx_rand = random.randrange(2)
+                                        current_action = np.zeros([NUM_ACTIONS])
+                                        current_action[idx_array[idx_rand]] = 1
+                                        rospy.loginfo("force 1  < 5, degree < -60, change to %d", idx_array[idx_rand])
+					max_idx=idx_array[idx_rand]
+				elif current_degree > 180:
+					idx_array = [1,7]
+					idx_rand = random.randrange(2)
+                                        current_action = np.zeros([NUM_ACTIONS])
+                                        current_action[idx_array[idx_rand]] = 1
+                                        rospy.loginfo("force 1  < 5, degree > +60, change to %d", idx_array[idx_rand])					
+					max_idx=idx_array[idx_rand]
+				else:
+					idx_array = [1,3,4,5,7]
+					idx_rand = random.randrange(5)
+                                        current_action = np.zeros([NUM_ACTIONS])
+                                        current_action[idx_array[idx_rand]] = 1
+                                        rospy.loginfo("force 1  < 5, degree ok, change to %d", idx_array[idx_rand])
+                                        max_idx=idx_array[idx_rand]
 
-		if current_force_2 > 35:
-			if max_idx==1 or max_idx==3 or max_idx==4:
-				idx_array = [2,5,6,7,8]
-				idx_rand = random.randrange(5)
-				#max_idx=6
+	
+		elif current_force_2 < 5:
+			if current_degree < 80:
+				idx_array = [3,5]
+				idx_rand = random.randrange(2)
+                                current_action = np.zeros([NUM_ACTIONS])
+                                current_action[idx_array[idx_rand]] = 1
+                                rospy.loginfo("force 2 < 5, degree < -60, change to %d", idx_array[idx_rand])
+				max_idx=idx_array[idx_rand]
+			elif current_degree > 180:
+				idx_array = [1,7]
+				idx_rand = random.randrange(2)
 				current_action = np.zeros([NUM_ACTIONS])
 				current_action[idx_array[idx_rand]] = 1
-				#punish = 1
+				rospy.loginfo("force 2 < 5, degree > 60, change to %d", idx_array[idx_rand])
+				max_idx=idx_array[idx_rand]
+			else:
+				idx_array = [1,4,7]
+				idx_rand = random.randrange(3)
+                                current_action = np.zeros([NUM_ACTIONS])
+                                current_action[idx_array[idx_rand]] = 1
+                                rospy.loginfo("force 1 & 2 < 5, degree > +60, change to %d", idx_array[idx_rand])
+                                max_idx=idx_array[idx_rand]
 
 
-		if current_degree < -80:
-			if max_idx==1 or max_idx==4 or max_idx==7:
-				idx_array = [2,3,5,6,8]
-				idx_rand = random.randrange(5)
-				#max_idx=5
-				current_action = np.zeros([NUM_ACTIONS])
-				current_action[idx_array[idx_rand]] = 1
-		elif current_degree > 80:
-			if max_idx==3 or max_idx==4 or max_idx==5:
-				idx_array = [1,2,6,7,8]
-				idx_rand = random.randrange(5)
-				#max_idx=7
-				current_action = np.zeros([NUM_ACTIONS])
-				current_action[idx_array[idx_rand]] = 1
 		
 
 		rospy.loginfo("action we publish >%d<", max_idx)
@@ -476,7 +483,11 @@ def listener():
 
 
 		#we append it to our observations
+		#if observations == None:
+		#	observations = np.append(observations, (last_state, last_action, reward, current_state))
+		#else:
 		observations.append((last_state, last_action, reward, current_state))
+
 		if len(observations) > MEMORY_SIZE:
 			observations.popleft()
 		
