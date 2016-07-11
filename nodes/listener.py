@@ -2,6 +2,7 @@
 import rospy
 from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Float32
+from std_msgs.msg import Int16
 from std_msgs.msg import Int16MultiArray
 import tensorflow as tf
 import numpy as np
@@ -44,18 +45,18 @@ states = []
 
 #variables for bad-mapping approach, s1=servo1 , s2=servo2,.... 
 s1_stop = 377
-s1_fwd_1 = 382
-s1_bwd_1 = 372
+s1_fwd_1 = 380
+s1_bwd_1 = 374
 #.... normaly there are many more fwd or bwd speeds, but i dont know how to map so many mathematically
 s2_stop = 399
-s2_fwd_1 = 403
-s2_bwd_1 = 395
+s2_fwd_1 = 401
+s2_bwd_1 = 397
 sx0 = 1050  #do nothing value for not-used servos
 
 observations = deque()
 
 
-MINI_BATCH_SIZE = 20 
+MINI_BATCH_SIZE = 20
 probability_of_random_action = 1
 
 
@@ -168,6 +169,11 @@ def probability_callback(data):
     global probability_of_random_action
     probability_of_random_action = data.data
 
+def degree_goal_callback(data):
+    rospy.loginfo("degree goal %d", data.data)
+    global degree_goal
+    degree_goal = data.data
+
 def weight_variable(shape, name):
     initial = tf.truncated_normal(shape, stddev=0.01)
     return tf.Variable(initial)
@@ -276,6 +282,7 @@ def listener():
     rospy.Subscriber("adc_pi_plus_pub", Float32MultiArray, adc_callback)
     rospy.Subscriber("degree", Float32, degree_callback)
     rospy.Subscriber("probability", Float32, probability_callback)
+    rospy.Subscriber("degree_goal", Int16, degree_goal_callback)
     servo_pub = rospy.Publisher('servo_pwm_pi_sub', Int16MultiArray, queue_size=1)
     current_state_image_pub = rospy.Publisher('current_state_image', Image, queue_size=1)
 
@@ -292,7 +299,7 @@ def listener():
     last_state = None
     sum_writer_index = 0
     MEMORY_SIZE = 100000
-    OBSERVATION_STEPS = 100
+    OBSERVATION_STEPS = 20
     FUTURE_REWARD_DISCOUNT = 0.9
     global observations
 
